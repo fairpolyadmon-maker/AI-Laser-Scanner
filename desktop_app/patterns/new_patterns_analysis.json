@@ -1,0 +1,16 @@
+[
+  {
+    "pattern_name": "Bearish Engulfing Continuation (Setup 28)",
+    "pattern_id": "bearish_engulfing_continuation",
+    "signal": "PUT",
+    "description_bn": "১নং বড় লাল ক্যান্ডেলের পর ৩টি সবুজ ক্যান্ডেল পুলব্যাক করার পর ৩নং লাল ক্যান্ডেল সেগুলোকে এঙ্গলফ করে নিচে ক্লোজ হলে ডাউন ট্রেড নিতে হবে।",
+    "file_name": "IMG_20260917_211159_301@2095106292.jpg"
+  },
+  {
+    "pattern_name": "Bullish Engulfing with Retracement",
+    "pattern_id": "bullish_engulfing_with_retracement",
+    "signal": "CALL",
+    "description_bn": "বুলিশ ইঙ্গালফিং এর পর ৩নং লাল ক্যান্ডেলটি ১ম ক্যান্ডেলের ওপেন লেভেল ব্রেক না করে উপরে ক্লোজ দিলে পরবর্তী ক্যান্ডেলে আপে (CALL) ট্রেড নিতে হবে।",
+    "file_name": "IMG_20260917_211241_641@551462605.jpg"
+  }
+]

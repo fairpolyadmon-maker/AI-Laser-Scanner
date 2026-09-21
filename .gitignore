@@ -1,0 +1,33 @@
+# Environments and secret keys
+.env
+*.env
+*.lic
+*.key
+license.lic
+
+# Android binaries & temporary files
+AI Laser Scanner.apk
+*.idsig
+*.backup
+apk_staging/
+temp_*.apk
+
+# Windows executable and build outputs
+*.exe
+build/
+dist/
+*.spec
+*.log
+
+# Python cache
+__pycache__/
+*/__pycache__/
+*/**/__pycache__/
+*.pyc
+*.pyo
+
+# IDE and OS files
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini

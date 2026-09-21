@@ -1,0 +1,13 @@
+{
+  "pattern_name": "বুলিশ এঙ্গালফিং (Bullish Engulfing)",
+  "signal": "CALL (UP / BUY)",
+  "type": "Bullish Reversal",
+  "rules": {
+    "trend_before": "ডাউনট্রেন্ড (Down-trend) বা সাপোর্ট লেভেলে থাকা আবশ্যক",
+    "candle_1": "একটি ছোট লাল ক্যান্ডেল (Bearish candle)",
+    "candle_2": "একটি বড় সবুজ ক্যান্ডেল (Bullish candle) যা আগের পুরো লাল ক্যান্ডেলটিকে সম্পূর্ণরূপে ঢেকে ফেলে (Engulf করে)",
+    "location": "সাপোর্ট জোন (Support Zone) বা ডাউনট্রেন্ডের একদম শেষে",
+    "entry_condition": "পরবর্তী ক্যান্ডেলে UP / CALL (BUY) ট্রেড নিতে হবে"
+  },
+  "caution": "যদি এটি রেজিস্ট্যান্সে বা অলরেডি আপট্রেন্ডের শীর্ষে দেখা যায়, তবে এন্ট্রি এড়িয়ে চলতে হবে।"
+}
