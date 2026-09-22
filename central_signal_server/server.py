@@ -225,6 +225,87 @@ async def handle_scan(request):
             "error": str(e)
         }, status=500)
 
+async def handle_mobile_gemini_scan(request):
+    """
+    Direct endpoint for native Android FloatingWidgetService.
+    Accepts Gemini JSON ({contents: [{parts: [{inline_data: ...}]}]}),
+    synchronizes with MinuteSignalCache, and returns candidate response.
+    """
+    try:
+        body = await request.json()
+        b64_str = ""
+        contents = body.get("contents", [])
+        for c in contents:
+            for part in c.get("parts", []):
+                inline = part.get("inline_data", {})
+                if "data" in inline:
+                    b64_str = inline["data"]
+                    break
+            if b64_str:
+                break
+
+        if not b64_str:
+            return web.json_response({"error": "No image found"}, status=400)
+
+        image_bytes = base64.b64decode(b64_str)
+        eval_result = evaluate_chart_with_gemini(image_bytes)
+
+        is_chart = eval_result.get("is_trading_chart", False)
+        pair_name = eval_result.get("pair", "EUR/USD")
+        if pair_name in ["", "UNKNOWN"]:
+            pair_name = "EUR/USD"
+
+        # Check minute lock
+        if is_chart and eval_result.get("signal") in ["CALL", "PUT"]:
+            cached = signal_cache.get(pair_name)
+            if cached:
+                eval_result = cached
+            else:
+                eval_result = signal_cache.set(pair_name, eval_result)
+
+        sig = eval_result.get("signal", "READY")
+        p_id = eval_result.get("pattern_id", "candlestick_momentum")
+        p_name = eval_result.get("pattern_name", "Candlestick Action")
+        exp_min = eval_result.get("recommended_expiry_minutes", 1)
+
+        inner_json = {
+            "is_trading_chart": is_chart,
+            "market_structure": "UPTREND" if sig == "CALL" else ("DOWNTREND" if sig == "PUT" else "RANGING"),
+            "signal": sig,
+            "pair": pair_name,
+            "pattern_id": p_id,
+            "pattern_name": p_name,
+            "recommended_expiry_minutes": exp_min,
+            "confidence": eval_result.get("confidence", 92)
+        }
+
+        gemini_response = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": json.dumps(inner_json)
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        return web.json_response(gemini_response)
+
+    except Exception as e:
+        print(f"[Mobile Scan Error] {e}")
+        return web.json_response({
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "text": json.dumps({"is_trading_chart": False, "signal": "READY"})
+                    }]
+                }
+            }]
+        })
+
 async def handle_get_signal(request):
     """
     GET /api/signal?pair=EURUSD
@@ -325,6 +406,7 @@ def make_app():
     app.router.add_post('/api/scan', handle_scan)
     app.router.add_get('/api/signal', handle_get_signal)
     app.router.add_get('/api/status', handle_status)
+    app.router.add_post('/v1beta/models/{tail:.*}', handle_mobile_gemini_scan)
     return app
 
 if __name__ == '__main__':
