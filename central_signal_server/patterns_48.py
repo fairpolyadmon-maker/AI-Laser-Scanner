@@ -37,12 +37,14 @@ You possess complete knowledge of 48 Master Candlestick Patterns and Price Actio
 Analyze this trading screen:
 
 1. STRICT CHART VERIFICATION:
-   - Does this image contain a genuine live trading chart with green and red Japanese Candlesticks (bodies and wicks) plotted over time?
-   - If this is an app icon, logo, desktop wallpaper, blank screen, website home, or non-candlestick screen -> RETURN:
-     {{"is_trading_chart": false, "signal": "READY", "pair": "UNKNOWN", "pattern_id": "none", "pattern_name": "No Chart Detected", "pattern_name_bn": "কোনো চার্ট মেলেনি", "confidence": 0, "recommended_expiry_minutes": 1, "reason": "Not a trading chart."}}
+   - Does this image contain a trading chart with green and red Japanese Candlesticks (bodies and wicks)?
+   - Works on BOTH desktop PC charts AND mobile phone trading apps (Quotex, Pocket Option, Binomo, Olymp Trade, Deriv, TradingView, MetaTrader) in portrait or landscape!
+   - As long as candlestick bars (red/green) are visible on the mobile or desktop screen, it IS a valid trading chart (is_trading_chart: true).
+   - ONLY return is_trading_chart: false if this is a phone home screen, chat app, gallery, or has zero trading candlesticks:
+     {{"is_trading_chart": false, "signal": "NONE", "pair": "UNKNOWN", "pattern_id": "none", "pattern_name": "No Chart Detected", "pattern_name_bn": "কোনো চার্ট মেলেনি", "confidence": 0, "recommended_expiry_minutes": 1, "reason": "Not a trading chart."}}
 
 2. AUTO-DETECT CURRENCY PAIR / ASSET:
-   - Read the CURRENCY PAIR or ASSET NAME from the chart header, tab, or title (e.g. EUR/USD, EUR/JPY, GBP/USD OTC, CAD/CHF OTC, BTC/USD, etc.).
+   - Read the CURRENCY PAIR or ASSET NAME from the chart header, tab, or title (e.g. EUR/USD, EUR/JPY, GBP/USD OTC, CAD/CHF OTC, USD/INR OTC, BTC/USD, etc.). If not visible, default to "EUR/USD".
 
 3. DECISIVE BINARY OPTIONS 1-MINUTE PREDICTION:
    - For Binary Options 1-minute expiration, evaluate whether BUYERS (CALL) or SELLERS (PUT) have the statistical edge for the upcoming candle.

@@ -286,6 +286,12 @@ async def handle_mobile_gemini_scan(request):
             signal_cache.active_signals[pair_name.upper()] = eval_result
 
         sig = eval_result.get("signal", "READY")
+        if not is_chart:
+            sig = "NONE"
+        elif sig not in ["CALL", "PUT"]:
+            # If chart is valid, resolve decisively to CALL or PUT
+            sig = "CALL" if any(x in str(eval_result.get("pattern_id", "")).lower() for x in ["bull", "call", "bottom", "hammer", "bounce"]) else "PUT"
+
         p_id = eval_result.get("pattern_id", "candlestick_momentum")
         p_name = eval_result.get("pattern_name", "Candlestick Action")
         exp_min = eval_result.get("recommended_expiry_minutes", 1)
