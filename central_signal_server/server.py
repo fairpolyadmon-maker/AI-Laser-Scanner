@@ -110,8 +110,8 @@ def evaluate_chart_with_gemini(image_bytes):
     }
     req_bytes = json.dumps(payload).encode("utf-8")
     
-    # Fastest, highest throughput models first
-    models = ["gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3-flash-preview"]
+    # Fastest, highest throughput models first (gemini-3.6-flash is Google's newest 2026 flagship)
+    models = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
     raw_result = None
 
     for m in models:
