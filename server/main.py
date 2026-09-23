@@ -185,7 +185,7 @@ def evaluate_chart_with_gemini(image_bytes: bytes) -> dict:
         }
     }
     req_bytes = json.dumps(payload).encode("utf-8")
-    models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    models = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
     raw_result = None
 
     for m in models:
