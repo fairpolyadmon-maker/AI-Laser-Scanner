@@ -185,14 +185,14 @@ def evaluate_chart_with_gemini(image_bytes: bytes) -> dict:
         }
     }
     req_bytes = json.dumps(payload).encode("utf-8")
-    models = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
+    models = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.6-flash"]
     raw_result = None
 
     for m in models:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={GEMINI_API_KEY}"
             req = urllib.request.Request(url, data=req_bytes, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=12) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 res_json = json.loads(resp.read().decode("utf-8"))
                 text_val = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
                 if text_val.startswith("```"):
