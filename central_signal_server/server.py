@@ -34,6 +34,13 @@ class MinuteSignalCache:
         self.cache = {}
         self.active_signals = {}
         self.history = []
+        self.stats = {
+            "total_scans": 0,
+            "last_mobile_scan": "Never",
+            "last_desktop_scan": "Never",
+            "last_mobile_status": "Ready",
+            "last_desktop_status": "Ready"
+        }
 
     def get_candle_key(self, pair_name):
         now = datetime.now()
@@ -191,7 +198,12 @@ async def handle_scan(request):
         if not image_bytes:
             return web.json_response({"error": "No image data provided"}, status=400)
 
-        # 1. Evaluate with Deterministic AI
+        # 1. Update Desktop Stats
+        signal_cache.stats["total_scans"] += 1
+        signal_cache.stats["last_desktop_scan"] = datetime.now().strftime("%H:%M:%S")
+        signal_cache.stats["last_desktop_status"] = "Connected / Active"
+
+        # 2. Evaluate with Deterministic AI
         eval_result = evaluate_chart_with_gemini(image_bytes)
 
         # If not a trading chart, return READY immediately (zero fake signals!)
@@ -202,18 +214,19 @@ async def handle_scan(request):
         if pair_name in ["", "UNKNOWN"]:
             pair_name = "EUR/USD"
 
-        # 2. Check Minute-Lock Cache
+        # 3. Check Minute-Lock Cache
         cached_signal = signal_cache.get(pair_name)
         if cached_signal is not None:
             # Return existing locked signal so all users get exact same result!
             return web.json_response(cached_signal)
 
-        # 3. Lock new signal for this candle minute ONLY IF valid CALL or PUT!
+        # 4. Lock new signal for this candle minute ONLY IF valid CALL or PUT!
         sig = eval_result.get("signal", "READY")
         if sig in ["CALL", "PUT"]:
             locked = signal_cache.set(pair_name, eval_result)
             return web.json_response(locked)
         else:
+            signal_cache.active_signals[pair_name.upper()] = eval_result
             return web.json_response(eval_result)
 
     except Exception as e:
@@ -232,6 +245,11 @@ async def handle_mobile_gemini_scan(request):
     synchronizes with MinuteSignalCache, and returns candidate response.
     """
     try:
+        # Update Mobile Stats
+        signal_cache.stats["total_scans"] += 1
+        signal_cache.stats["last_mobile_scan"] = datetime.now().strftime("%H:%M:%S")
+        signal_cache.stats["last_mobile_status"] = "Connected / Active"
+
         body = await request.json()
         b64_str = ""
         contents = body.get("contents", [])
@@ -262,6 +280,8 @@ async def handle_mobile_gemini_scan(request):
                 eval_result = cached
             else:
                 eval_result = signal_cache.set(pair_name, eval_result)
+        elif is_chart:
+            signal_cache.active_signals[pair_name.upper()] = eval_result
 
         sig = eval_result.get("signal", "READY")
         p_id = eval_result.get("pattern_id", "candlestick_momentum")
@@ -329,6 +349,7 @@ async def handle_status(request):
         "service": "AI Laser Scanner Central Signal Hub",
         "active_pairs_count": len(signal_cache.active_signals),
         "active_signals": signal_cache.active_signals,
+        "stats": signal_cache.stats,
         "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     })
 
@@ -341,9 +362,17 @@ async def handle_dashboard(request):
 <title>AI Laser Scanner - Central Signal Hub</title>
 <style>
   body { background:#0b1120; color:#e2e8f0; font-family:'Segoe UI',sans-serif; margin:0; padding:20px; }
-  .header { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1e293b; padding-bottom:15px; }
+  .header { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1e293b; padding-bottom:15px; flex-wrap:wrap; gap:10px; }
   .title { font-size:24px; font-weight:bold; color:#38bdf8; }
   .badge { background:#10b981; color:#ffffff; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:bold; }
+  .device-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:15px; margin-top:20px; }
+  .dev-card { background:#0f172a; border:1px solid #334155; border-radius:10px; padding:15px; display:flex; align-items:center; gap:12px; }
+  .dev-icon { font-size:28px; }
+  .dev-title { font-size:14px; font-weight:bold; color:#f1f5f9; }
+  .dev-sub { font-size:12px; color:#94a3b8; margin-top:3px; }
+  .dev-dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:4px; }
+  .dot-green { background:#10b981; box-shadow:0 0 8px #10b981; }
+  .dot-yellow { background:#f59e0b; }
   .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:20px; margin-top:25px; }
   .card { background:#1e293b; border:1px solid #334155; border-radius:12px; padding:20px; box-shadow:0 4px 6px rgba(0,0,0,0.3); }
   .pair-title { font-size:20px; font-weight:bold; color:#f8fafc; }
@@ -357,20 +386,66 @@ async def handle_dashboard(request):
 <body>
   <div class="header">
     <div class="title">⚡ AI Laser Scanner - Central Signal Hub</div>
-    <div class="badge">LIVE SERVER RUNNING (REAL-TIME)</div>
+    <div class="badge">● LIVE SERVER ACTIVE</div>
   </div>
-  <p style="color:#94a3b8;">সারা বিশ্বের সব মোবাইল ও ডেস্কটপ ডিভাইসের জন্য একক ও শতভাগ সিঙ্কড সিগন্যাল সার্ভার।</p>
+  <p style="color:#94a3b8; margin-top:8px;">সারা বিশ্বের সব মোবাইল ও ডেস্কটপ ডিভাইসের জন্য একক ও শতভাগ সিঙ্কড সেন্ট্রাল সিগন্যাল সার্ভার।</p>
+
+  <div class="device-row">
+    <div class="dev-card">
+      <div class="dev-icon">📱</div>
+      <div>
+        <div class="dev-title"><span id="mob-dot" class="dev-dot dot-yellow"></span>মোবাইল অ্যাপ (Android)</div>
+        <div class="dev-sub" id="mob-info">লাস্ট স্ক্যান: অপেক্ষা করছে...</div>
+      </div>
+    </div>
+    <div class="dev-card">
+      <div class="dev-icon">💻</div>
+      <div>
+        <div class="dev-title"><span id="desk-dot" class="dev-dot dot-yellow"></span>ডেস্কটপ উইজেট (PC)</div>
+        <div class="dev-sub" id="desk-info">লাস্ট স্ক্যান: অপেক্ষা করছে...</div>
+      </div>
+    </div>
+    <div class="dev-card">
+      <div class="dev-icon">⚡</div>
+      <div>
+        <div class="dev-title">মোট ক্লাউড স্ক্যান</div>
+        <div class="dev-sub" id="scan-count">০ টি স্ক্যান সম্পন্ন</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:30px; color:#f1f5f9; border-bottom:1px solid #1e293b; padding-bottom:8px;">📊 লাইভ সক্রিয় সিগন্যালসমূহ (100% Locked)</h3>
   <div class="grid" id="grid"></div>
+
   <script>
     async function refresh() {
       try {
         const res = await fetch('/api/status');
         const data = await res.json();
+
+        // Update stats
+        if (data.stats) {
+          const mobTime = data.stats.last_mobile_scan;
+          const deskTime = data.stats.last_desktop_scan;
+          const count = data.stats.total_scans || 0;
+
+          document.getElementById('scan-count').innerText = count + ' টি স্ক্যান সম্পন্ন';
+
+          if (mobTime !== 'Never') {
+            document.getElementById('mob-info').innerText = 'লাস্ট স্ক্যান: ' + mobTime;
+            document.getElementById('mob-dot').className = 'dev-dot dot-green';
+          }
+          if (deskTime !== 'Never') {
+            document.getElementById('desk-info').innerText = 'লাস্ট স্ক্যান: ' + deskTime;
+            document.getElementById('desk-dot').className = 'dev-dot dot-green';
+          }
+        }
+
         const grid = document.getElementById('grid');
         grid.innerHTML = '';
-        const pairs = Object.keys(data.active_signals);
+        const pairs = Object.keys(data.active_signals || {});
         if (pairs.length === 0) {
-          grid.innerHTML = '<div class="card" style="grid-column:1/-1; text-align:center; color:#64748b;">কোনো পেয়ার এখনও স্ক্যান করা হয়নি। মোবাইল বা ডেস্কটপ স্ক্যান করলে এখানে রিয়েলটাইম সিঙ্ক শো করবে।</div>';
+          grid.innerHTML = '<div class="card" style="grid-column:1/-1; text-align:center; color:#64748b; padding:40px;">কোনো পেয়ার এখনও স্ক্যান করা হয়নি। মোবাইল বা ডেস্কটপ থেকে চার্ট স্ক্যান করলেই এখানে সাথে সাথে দেখা যাবে।</div>';
           return;
         }
         pairs.forEach(p => {
