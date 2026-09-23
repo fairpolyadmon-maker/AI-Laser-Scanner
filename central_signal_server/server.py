@@ -70,7 +70,7 @@ class MinuteSignalCache:
 
 signal_cache = MinuteSignalCache()
 
-def evaluate_chart_with_gemini(image_bytes):
+async def evaluate_chart_with_gemini(image_bytes):
     """
     Calls Gemini Vision AI deterministically (temperature: 0.0, topK: 1, seed: 42).
     Optimized for sub-second binary options price action analysis.
@@ -109,29 +109,32 @@ def evaluate_chart_with_gemini(image_bytes):
     }
     req_bytes = json.dumps(payload).encode("utf-8")
     
-    # High-throughput models with automatic sub-second failover
-    models = ["gemini-3.1-flash-lite", "gemini-3.6-flash", "gemini-flash-lite-latest"]
+    # Non-blocking async aiohttp call with 3.5s timeout
+    models = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
     raw_result = None
-    last_err = ""
 
-    for m in models:
+    if API_KEY:
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={API_KEY}"
-            req = urllib.request.Request(url, data=req_bytes, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=4) as resp:
-                res_json = json.loads(resp.read().decode("utf-8"))
-                text_val = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
-                if text_val.startswith("```"):
-                    text_val = text_val.strip("`")
-                    if text_val.startswith("json"):
-                        text_val = text_val[4:].strip()
-                raw_result = json.loads(text_val)
-                if raw_result:
-                    break
-        except Exception as ex:
-            last_err = str(ex)
-            print(f"[AI Model Error: {m}] {ex}")
-            continue
+            timeout = aiohttp.ClientTimeout(total=3.5)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                for m in models:
+                    try:
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={API_KEY}"
+                        async with session.post(url, json=payload, headers={"Content-Type": "application/json"}) as resp:
+                            if resp.status == 200:
+                                res_json = await resp.json()
+                                text_val = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
+                                if text_val.startswith("```"):
+                                    text_val = text_val.strip("`")
+                                    if text_val.startswith("json"):
+                                        text_val = text_val[4:].strip()
+                                raw_result = json.loads(text_val)
+                                if raw_result:
+                                    break
+                    except Exception:
+                        continue
+        except Exception:
+            pass
 
     if not raw_result:
         all_p = patterns_48.get_all_patterns()
@@ -231,7 +234,7 @@ async def handle_scan(request):
         signal_cache.stats["last_desktop_status"] = "Connected / Active"
 
         # 2. Evaluate with Deterministic AI
-        eval_result = evaluate_chart_with_gemini(image_bytes)
+        eval_result = await evaluate_chart_with_gemini(image_bytes)
 
         pair_name = eval_result.get("pair", "LIVE_OTC")
         if pair_name in ["", "UNKNOWN", "NONE"]:
@@ -288,7 +291,7 @@ async def handle_mobile_gemini_scan(request):
             return web.json_response({"error": "No image found"}, status=400)
 
         image_bytes = base64.b64decode(b64_str)
-        eval_result = evaluate_chart_with_gemini(image_bytes)
+        eval_result = await evaluate_chart_with_gemini(image_bytes)
 
         pair_name = eval_result.get("pair", "LIVE_OTC")
         if pair_name in ["", "UNKNOWN", "NONE"]:
