@@ -103,11 +103,6 @@ RETURN VALID JSON ONLY:
   "confluence_factors": ["Wick Rejection", "Candlestick Reaction", "Trend Momentum"]
 }}
 """
-  "recommended_expiry_minutes": 1,
-  "confidence": 95,
-  "confluence_factors": ["Support Level Rejection", "21 EMA Bounce"]
-}}
-"""
 
 class MinuteSignalCache:
     """
