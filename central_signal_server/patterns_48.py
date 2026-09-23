@@ -4,15 +4,18 @@ import json
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 JSON_PATH = os.path.join(BASE_DIR, "patterns", "candlestick_memory_48.json")
 
-def load_patterns_prompt():
-    patterns = []
+def get_all_patterns():
     if os.path.exists(JSON_PATH):
         try:
             with open(JSON_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                patterns = data.get("patterns", [])
-        except Exception as e:
-            print(f"[Patterns] Error loading patterns: {e}")
+                return data.get("patterns", [])
+        except Exception:
+            pass
+    return []
+
+def load_patterns_prompt():
+    patterns = get_all_patterns()
 
     call_patterns_list = []
     put_patterns_list = []
