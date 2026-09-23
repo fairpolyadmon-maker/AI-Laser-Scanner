@@ -200,30 +200,44 @@ async def handle_scan(request):
     """
     try:
         image_bytes = None
-        if request.content_type.startswith("multipart/form-data"):
-            reader = await request.multipart()
-            while True:
-                part = await reader.next()
-                if part is None:
+        if "multipart" in request.content_type.lower():
+            post_data = await request.post()
+            for key in ["image", "file"]:
+                field = post_data.get(key)
+                if field is not None:
+                    if hasattr(field, "file"):
+                        image_bytes = field.file.read()
+                    elif hasattr(field, "read"):
+                        image_bytes = field.read()
+                    elif isinstance(field, bytes):
+                        image_bytes = field
                     break
-                if part.name == "image":
-                    image_bytes = await part.read()
-                    break
-        else:
+        elif "json" in request.content_type.lower():
             try:
                 body = await request.json()
-                b64_str = body.get("image_base64", "")
+                b64_str = body.get("image_base64", "") or body.get("image", "")
                 if b64_str:
+                    if "," in b64_str:
+                        b64_str = b64_str.split(",")[1]
                     image_bytes = base64.b64decode(b64_str)
             except Exception:
                 pass
 
         if not image_bytes:
-            # Fallback to standard post data
-            data = await request.post()
-            image_file = data.get("image")
-            if image_file:
-                image_bytes = image_file.file.read()
+            try:
+                post_data = await request.post()
+                for key in ["image", "file"]:
+                    field = post_data.get(key)
+                    if field is not None:
+                        if hasattr(field, "file"):
+                            image_bytes = field.file.read()
+                        elif hasattr(field, "read"):
+                            image_bytes = field.read()
+                        elif isinstance(field, bytes):
+                            image_bytes = field
+                        break
+            except Exception:
+                pass
 
         if not image_bytes:
             return web.json_response({"error": "No image data provided"}, status=400)
