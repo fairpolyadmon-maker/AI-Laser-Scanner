@@ -110,9 +110,10 @@ def evaluate_chart_with_gemini(image_bytes):
     }
     req_bytes = json.dumps(payload).encode("utf-8")
     
-    # Fastest, highest throughput models first (gemini-3.6-flash is Google's newest 2026 flagship)
-    models = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
+    # High-throughput models with automatic sub-second failover
+    models = ["gemini-3.1-flash-lite", "gemini-3.6-flash", "gemini-flash-lite-latest"]
     raw_result = None
+    last_err = ""
 
     for m in models:
         try:
@@ -129,6 +130,7 @@ def evaluate_chart_with_gemini(image_bytes):
                 if raw_result:
                     break
         except Exception as ex:
+            last_err = str(ex)
             print(f"[AI Model Error: {m}] {ex}")
             continue
 
@@ -137,11 +139,11 @@ def evaluate_chart_with_gemini(image_bytes):
             "is_trading_chart": False,
             "pair": "UNKNOWN",
             "signal": "READY",
-            "pattern_name": "No Chart Detected",
-            "pattern_name_bn": "কোনো চার্ট মেলেনি",
+            "pattern_name": "Scanner Ready",
+            "pattern_name_bn": "স্ক্যানার প্রস্তুত",
             "recommended_expiry_minutes": 1,
             "confidence": 0,
-            "reason": "Screen does not appear to be an active trading chart."
+            "reason": f"AI Engine Notice: {last_err}" if last_err else "Screen does not appear to be an active trading chart."
         }
 
     is_chart = raw_result.get("is_trading_chart", False)
