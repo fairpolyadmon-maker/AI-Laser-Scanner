@@ -894,8 +894,8 @@ async def handle_scan(
     await manager.broadcast(locked)
     return locked
 
-@app.post("/v1beta/models/{tail:.*}")
-async def handle_mobile_gemini_proxy(request: Request):
+@app.api_route("/v1beta/{tail:path}", methods=["GET", "POST"])
+async def handle_mobile_gemini_proxy(request: Request, tail: str):
     """Fallback proxy for native Android widgets using Gemini format."""
     try:
         signal_cache.stats["total_scans"] += 1
