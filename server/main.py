@@ -40,21 +40,7 @@ PATTERNS_JSON_PATH = os.path.join(BASE_DIR, "patterns", "candlestick_memory_48.j
 CALL_WAV_PATH = os.path.join(BASE_DIR, "call_alert.wav")
 PUT_WAV_PATH = os.path.join(BASE_DIR, "put_alert.wav")
 
-# 10 Major Pairs Tracked Centrally for All Mobile Users Globally
-MAJOR_PAIRS = [
-    "EUR/USD OTC",
-    "GBP/USD OTC",
-    "USD/JPY OTC",
-    "AUD/USD OTC",
-    "USD/INR OTC",
-    "USD/BRL OTC",
-    "EUR/JPY OTC",
-    "GBP/JPY OTC",
-    "Crypto IDX",
-    "BTC/USD OTC"
-]
-
-# Load Master 48 Candlestick Patterns
+# Master Candlestick Patterns will be matched against live user chart scans
 MASTER_PATTERNS = []
 if os.path.exists(PATTERNS_JSON_PATH):
     try:
@@ -199,22 +185,7 @@ def generate_pair_signal(pair_name: str, target_dt: datetime) -> dict:
         "status": "ACTIVE"
     }
 
-def update_all_major_pairs():
-    """Refreshes signals for all 10 major pairs so the central hub is 100% active."""
-    now = datetime.now(timezone.utc)
-    if now.second >= 50:
-        target_dt = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
-    else:
-        target_dt = now.replace(second=0, microsecond=0)
 
-    for p in MAJOR_PAIRS:
-        cached = signal_cache.get(p)
-        if not cached:
-            sig_dict = generate_pair_signal(p, target_dt)
-            signal_cache.set(p, sig_dict)
-
-# Initialize signals for all 10 pairs immediately
-update_all_major_pairs()
 
 def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = None) -> dict:
     """Evaluates mobile screen capture using Gemini Vision AI + 48 Candlestick Patterns."""
@@ -337,7 +308,6 @@ async def start_background_clock():
     async def loop():
         while True:
             try:
-                update_all_major_pairs()
                 await manager.broadcast({
                     "type": "heartbeat",
                     "active_signals": signal_cache.active_signals,
@@ -669,31 +639,14 @@ def get_dashboard_html():
     </div>
   </div>
 
-  <!-- Interactive Mobile Scan Toolbar -->
+  <!-- Mobile Chart Scan Uploader / Instant Analyzer -->
   <div class="scan-toolbar">
     <div class="scan-toolbar-left">
-      <label for="pair-selector" style="font-size:13px; font-weight:bold; color:#94a3b8;">ট্রেডিং পেয়ার:</label>
-      <select id="pair-selector" class="pair-select">
-        <option value="EUR/USD OTC">EUR/USD OTC</option>
-        <option value="GBP/USD OTC">GBP/USD OTC</option>
-        <option value="USD/JPY OTC">USD/JPY OTC</option>
-        <option value="AUD/USD OTC">AUD/USD OTC</option>
-        <option value="USD/INR OTC">USD/INR OTC</option>
-        <option value="USD/BRL OTC">USD/BRL OTC</option>
-        <option value="EUR/JPY OTC">EUR/JPY OTC</option>
-        <option value="GBP/JPY OTC">GBP/JPY OTC</option>
-        <option value="Crypto IDX">Crypto IDX</option>
-        <option value="BTC/USD OTC">BTC/USD OTC</option>
-      </select>
       <input type="file" id="chart-file-input" class="file-input" accept="image/*" />
       <button class="btn-scan-action" onclick="document.getElementById('chart-file-input').click()">
-        📸 চার্ট ফটো/স্ক্রিনশট
+        📸 মোবাইল স্ক্রিনশট / চার্ট আপলোড ও স্ক্যান
       </button>
-    </div>
-    <div>
-      <button class="btn-scan-action" style="background: linear-gradient(135deg, #10b981, #059669);" onclick="triggerInstantScan()">
-        ⚡ এখনই স্ক্যান করুন (Instant Scan)
-      </button>
+      <span style="font-size:12px; color:#94a3b8;">(AI স্বয়ংক্রিয়ভাবে স্ক্রিন থেকে যেকোনো ব্রোকার/পেয়ার সনাক্ত করবে)</span>
     </div>
   </div>
 
@@ -764,7 +717,7 @@ def get_dashboard_html():
         const grid = document.getElementById('grid');
         const pairs = Object.keys(data.active_signals || {});
         if (pairs.length === 0) {
-          grid.innerHTML = '<div class="card" style="grid-column:1/-1; text-align:center; color:#64748b; padding:40px;">সিগন্যাল ইঞ্জিন সক্রিয় হচ্ছে...</div>';
+          grid.innerHTML = '<div class="card" style="grid-column:1/-1; text-align:center; color:#94a3b8; padding:50px; font-size:15px; line-height:1.8;">📱 <b>কোনো পেয়ার এখনও স্ক্যান করা হয়নি।</b><br>মোবাইল অ্যাপ থেকে পৃথিবীর যেকোনো প্রান্তের ইউজাররা তাদের স্ক্রিন (Quotex / Pocket Option) স্ক্যান করলেই সাথে সাথে সেই পেয়ারের লাইভ সিগন্যাল কার্ড এখানে স্বয়ংক্রিয়ভাবে যুক্ত হয়ে যাবে। ১০ জন ইউজার ১০টি পেয়ার স্ক্যান করলে ১০টি পেয়ারের সিগন্যালই একসাথে দেখা যাবে।</div>';
           return;
         }
 
@@ -804,10 +757,8 @@ def get_dashboard_html():
     document.getElementById('chart-file-input').addEventListener('change', async function(e) {
       const file = e.target.files[0];
       if (!file) return;
-      const selectedPair = document.getElementById('pair-selector').value;
       const formData = new FormData();
       formData.append('image', file);
-      formData.append('pair', selectedPair);
 
       try {
         const res = await fetch('/api/scan', { method: 'POST', body: formData });
@@ -819,19 +770,6 @@ def get_dashboard_html():
         alert('স্ক্যান ব্যর্থ হয়েছে: ' + err);
       }
     });
-
-    async function triggerInstantScan() {
-      const selectedPair = document.getElementById('pair-selector').value;
-      try {
-        const res = await fetch('/api/scan?pair=' + encodeURIComponent(selectedPair), { method: 'POST' });
-        const resData = await res.json();
-        playAlert(resData.signal);
-        alert(`⚡ ${resData.pair}: ${resData.signal} (${resData.pattern_name_bn}) সিগন্যাল সেন্ট্রাল সার্ভারে অ্যাক্টিভ!`);
-        refresh();
-      } catch(err) {
-        alert('ত্রুটি: ' + err);
-      }
-    }
 
     setInterval(refresh, 1500);
     refresh();
