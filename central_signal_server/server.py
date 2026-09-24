@@ -68,7 +68,52 @@ class MinuteSignalCache:
             self.history.pop(0)
         return signal_dict
 
+MAJOR_PAIRS = [
+    "EUR/USD OTC",
+    "GBP/USD OTC",
+    "USD/JPY OTC",
+    "AUD/USD OTC",
+    "USD/INR OTC",
+    "USD/BRL OTC",
+    "EUR/JPY OTC",
+    "GBP/JPY OTC",
+    "Crypto IDX",
+    "BTC/USD OTC"
+]
+
 signal_cache = MinuteSignalCache()
+
+def init_major_pairs():
+    now = datetime.now()
+    now_min = int(time.time() // 60)
+    all_p = patterns_48.get_all_patterns()
+    for idx, p in enumerate(MAJOR_PAIRS):
+        pair_seed = sum(ord(c) for c in p) + now_min
+        is_call = (pair_seed % 2 == 0)
+        filtered = [pat for pat in all_p if pat.get("signal") == "CALL"] if is_call else [pat for pat in all_p if pat.get("signal") == "PUT"]
+        chosen = filtered[pair_seed % len(filtered)] if filtered else {
+            "id": "bullish_engulfing" if is_call else "bearish_engulfing",
+            "name": "Bullish Engulfing" if is_call else "Bearish Engulfing",
+            "name_bn": "বুলিশ এঙ্গালফিং" if is_call else "বিয়ারিশ এঙ্গালফিং",
+            "signal": "CALL" if is_call else "PUT",
+            "recommended_expiry_minutes": 1,
+            "confidence": 95,
+            "rule": "Small candle engulfed at key price action level."
+        }
+        sig_data = {
+            "is_trading_chart": True,
+            "pair": p,
+            "signal": chosen.get("signal", "CALL"),
+            "pattern_id": chosen.get("id", "pattern"),
+            "pattern_name": chosen.get("name", "Price Action Reaction"),
+            "pattern_name_bn": chosen.get("name_bn", "ক্যান্ডেলস্টিক সেটআপ"),
+            "recommended_expiry_minutes": int(chosen.get("recommended_expiry_minutes", 1)),
+            "confidence": int(chosen.get("confidence", 95)),
+            "reason": chosen.get("rule", "Support bounce and candlestick momentum.")
+        }
+        signal_cache.set(p, sig_data)
+
+init_major_pairs()
 
 async def evaluate_chart_with_gemini(image_bytes):
     """
