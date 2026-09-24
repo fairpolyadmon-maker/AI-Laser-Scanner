@@ -64,10 +64,12 @@ You are the world's most elite Binary Options & Candlestick Pattern Recognition 
 You analyze live candlestick trading charts from Quotex, Pocket Option, TradingView, IQ Option, Binomo, etc.
 
 CRITICAL MANDATE:
-You MUST determine a definitive trade direction for the next 1-minute candle: EITHER "CALL" OR "PUT".
+You MUST determine a definitive trade direction for the upcoming :00 candle: EITHER "CALL" OR "PUT".
 NEVER output "WAIT" or "READY". A definitive trading signal is strictly required on every scan.
-- Choose "CALL" (UP / BUY / Green Candle) if buyers' momentum, support bounce, lower wick rejection, or bullish pattern dominates.
-- Choose "PUT" (DOWN / SELL / Red Candle) if sellers' momentum, resistance rejection, upper wick rejection, or bearish pattern dominates.
+- Objectively weigh both Buyers (CALL) and Sellers (PUT) equally.
+- Output "CALL" (UP / BUY / Green Candle) if buyers' momentum, support bounce, lower wick rejection, green engulfing, hammer, pin bar, or bullish continuation is present.
+- Output "PUT" (DOWN / SELL / Red Candle) if sellers' momentum, resistance rejection, upper wick rejection, red engulfing, shooting star, or bearish continuation is present.
+- DO NOT bias towards PUT or CALL. Give an accurate, unbiased trade direction based on the current candlestick formation.
 
 Read the currency/asset pair name from the chart header (e.g. "EUR/USD OTC", "GBP/USD", "USD/INR OTC") or default to "LIVE_OTC".
 
@@ -254,10 +256,12 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
 
     sig = str(raw_result.get("signal", "")).upper().strip()
     if sig not in ["CALL", "PUT"]:
-        pat_txt = (str(raw_result.get("pattern_name", "")) + " " + str(raw_result.get("reason", ""))).lower()
-        if any(w in pat_txt for w in ["bull", "call", "hammer", "bottom", "green", "up", "bounce"]):
+        pat_txt = (str(raw_result.get("pattern_name", "")) + " " + str(raw_result.get("reason", "")) + " " + str(raw_result.get("pattern_id", ""))).lower()
+        call_score = sum(1 for w in ["bull", "call", "hammer", "bottom", "green", "up", "bounce", "lower wick", "support", "piercing", "morning", "soldier"] if w in pat_txt)
+        put_score = sum(1 for w in ["bear", "put", "star", "top", "red", "down", "upper wick", "resistance", "dark cloud", "evening", "crow"] if w in pat_txt)
+        if call_score > put_score:
             sig = "CALL"
-        elif any(w in pat_txt for w in ["bear", "put", "star", "top", "red", "down", "rejection"]):
+        elif put_score > call_score:
             sig = "PUT"
         else:
             sig = "CALL" if ((int(time.time()) // 60) % 2 == 0) else "PUT"
