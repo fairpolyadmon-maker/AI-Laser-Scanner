@@ -745,6 +745,35 @@ def get_dashboard_html():
     <!-- Dynamic Cards Injected via JS -->
   </div>
 
+  <!-- Live Real-Time Scan Feed Section -->
+  <div class="section-header" style="margin-top: 40px;">
+    <div class="section-title">
+      📜 সেন্ট্রাল সার্ভার লাইভ স্ক্যান ও সিগন্যাল লগ (Live Real-Time Feed)
+    </div>
+    <div style="font-size: 13px; color: #38bdf8;">
+      ⚡ সেন্ট্রাল সিঙ্ক সক্রিয়
+    </div>
+  </div>
+
+  <div style="background:#0f172a; border:1px solid #1e293b; border-radius:14px; padding:16px; margin-bottom:40px; overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; text-align:left; font-size:12px; font-family:monospace;">
+      <thead>
+        <tr style="border-bottom:1px solid #334155; color:#94a3b8; font-size:11px;">
+          <th style="padding:10px 8px;">সময় (UTC)</th>
+          <th style="padding:10px 8px;">কারেন্সি পেয়ার</th>
+          <th style="padding:10px 8px;">সিগন্যাল</th>
+          <th style="padding:10px 8px;">ক্যান্ডেলস্টিক প্যাটার্ন (145 Master)</th>
+          <th style="padding:10px 8px;">টার্গেট ক্যান্ডেল</th>
+          <th style="padding:10px 8px;">লকিং কি</th>
+          <th style="padding:10px 8px;">স্ট্যাটাস</th>
+        </tr>
+      </thead>
+      <tbody id="log-tbody">
+        <tr><td colspan="7" style="padding:20px; text-align:center; color:#64748b;">মোবাইল বা ড্যাশবোর্ড থেকে স্ক্যান করা হলে এখানে লাইভ লগ দেখা যাবে...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <!-- Sound Audio Elements -->
   <audio id="snd-call" src="/call_alert.wav" preload="auto"></audio>
   <audio id="snd-put" src="/put_alert.wav" preload="auto"></audio>
@@ -795,51 +824,76 @@ def get_dashboard_html():
           }
         }
 
+        // Render Active Signal Cards
         const grid = document.getElementById('grid');
         const pairs = Object.keys(data.active_signals || {});
         if (pairs.length === 0) {
           grid.innerHTML = '<div class="card" style="grid-column:1/-1; text-align:center; color:#94a3b8; padding:50px; font-size:15px; line-height:1.8;">📱 <b>কোনো পেয়ার এখনও স্ক্যান করা হয়নি।</b><br>মোবাইল অ্যাপ থেকে পৃথিবীর যেকোনো প্রান্তের ইউজাররা তাদের স্ক্রিন (Quotex / Pocket Option) স্ক্যান করলেই সাথে সাথে সেই পেয়ারের লাইভ সিগন্যাল কার্ড এখানে স্বয়ংক্রিয়ভাবে যুক্ত হয়ে যাবে। ১০ জন ইউজার ১০টি পেয়ার স্ক্যান করলে ১০টি পেয়ারের সিগন্যালই একসাথে দেখা যাবে।</div>';
-          return;
+        } else {
+          let newHtml = '';
+          pairs.forEach(p => {
+            const item = data.active_signals[p];
+            const isCall = item.signal === 'CALL';
+            const isPut = item.signal === 'PUT';
+            let cls = 'sig-wait';
+            let sigText = '⏳ WAIT / FILTER';
+
+            if (isCall) {
+              cls = 'sig-call';
+              sigText = 'CALL (1m)';
+            } else if (isPut) {
+              cls = 'sig-put';
+              sigText = 'PUT (1m)';
+            }
+
+            // Check if new signal arrived
+            if (item.locked_key && lastSignalKeys[p] && lastSignalKeys[p] !== item.locked_key) {
+              if (isCall || isPut) {
+                playAlert(item.signal);
+              }
+            }
+            lastSignalKeys[p] = item.locked_key;
+
+            newHtml += `
+              <div class="card">
+                <div class="pair-title">📊 ${item.pair || p}</div>
+                <div class="sig-box ${cls}">${sigText}</div>
+                <div class="meta">
+                  🎯 <b>প্যাটার্ন:</b> ${item.pattern_name || 'Price Action'} (${item.pattern_name_bn || ''})<br>
+                  ⏱️ <b>টার্গেট ক্যান্ডেল:</b> ${item.candle_minute || 'Next Minute'}<br>
+                  🔒 <b>সিঙ্ক লকিং কি:</b> <code>${item.locked_key || '-'}</code><br>
+                  ⚡ <b>কনফিডেন্স:</b> ${item.confidence || 95}%<br>
+                  💡 <b>কারণ:</b> ${item.reason || 'Price action confirmation'}
+                </div>
+              </div>`;
+          });
+          grid.innerHTML = newHtml;
         }
 
-        let newHtml = '';
-        pairs.forEach(p => {
-          const item = data.active_signals[p];
-          const isCall = item.signal === 'CALL';
-          const isPut = item.signal === 'PUT';
-          let cls = 'sig-wait';
-          let sigText = '⏳ WAIT / FILTER';
+        // Render Recent Scans Log Table
+        const tbody = document.getElementById('log-tbody');
+        if (data.recent_scans && data.recent_scans.length > 0) {
+          let rows = '';
+          data.recent_scans.forEach(s => {
+            const isC = s.signal === 'CALL';
+            const isP = s.signal === 'PUT';
+            const badgeBg = isC ? '#16a34a' : isP ? '#dc2626' : '#475569';
+            const badgeText = isC ? '🟢 CALL' : isP ? '🔴 PUT' : '⚪ WAIT';
+            const timeStr = (s.server_timestamp || '').split('T')[1]?.split('.')[0] || s.candle_minute || '-';
 
-          if (isCall) {
-            cls = 'sig-call';
-            sigText = 'CALL (1m)';
-          } else if (isPut) {
-            cls = 'sig-put';
-            sigText = 'PUT (1m)';
-          }
-
-          // Check if new signal arrived
-          if (item.locked_key && lastSignalKeys[p] && lastSignalKeys[p] !== item.locked_key) {
-            if (isCall || isPut) {
-              playAlert(item.signal);
-            }
-          }
-          lastSignalKeys[p] = item.locked_key;
-
-          newHtml += `
-            <div class="card">
-              <div class="pair-title">📊 ${item.pair || p}</div>
-              <div class="sig-box ${cls}">${sigText}</div>
-              <div class="meta">
-                🎯 <b>প্যাটার্ন:</b> ${item.pattern_name || 'Price Action'} (${item.pattern_name_bn || ''})<br>
-                ⏱️ <b>টার্গেট ক্যান্ডেল:</b> ${item.candle_minute || 'Next Minute'}<br>
-                🔒 <b>সিঙ্ক লকিং কি:</b> <code>${item.locked_key || '-'}</code><br>
-                ⚡ <b>কনফিডেন্স:</b> ${item.confidence || 95}%<br>
-                💡 <b>কারণ:</b> ${item.reason || 'Price action confirmation'}
-              </div>
-            </div>`;
-        });
-        grid.innerHTML = newHtml;
+            rows += `
+              <tr style="border-bottom:1px solid #1e293b; color:#cbd5e1;">
+                <td style="padding:8px; font-weight:bold; color:#38bdf8;">${timeStr}</td>
+                <td style="padding:8px; font-weight:bold; color:#ffffff;">${s.pair || 'LIVE_OTC'}</td>
+                <td style="padding:8px;"><span style="background:${badgeBg}; color:#fff; padding:3px 8px; border-radius:4px; font-weight:bold; font-size:11px;">${badgeText}</span></td>
+                <td style="padding:8px; color:#94a3b8;">${s.pattern_name || 'Price Action'} <span style="color:#64748b;">(${s.pattern_name_bn || ''})</span></td>
+                <td style="padding:8px; color:#cbd5e1;">${s.candle_minute || '-'}</td>
+                <td style="padding:8px;"><code style="background:#1e293b; color:#38bdf8; padding:2px 6px; border-radius:4px;">${s.locked_key || '-'}</code></td>
+                <td style="padding:8px; color:${s.status === 'ACTIVE' ? '#4ade80' : '#f59e0b'}; font-weight:bold;">${s.status || 'OK'}</td>
+              </tr>`;
+          });
+          tbody.innerHTML = rows;
+        }
 
       } catch(e) {
         console.error(e);
@@ -889,14 +943,26 @@ def get_put_alert():
 
 @app.get("/api/status")
 def get_server_status():
-    """Returns real-time status of all 10 active pairs and scanner stats."""
+    """Returns real-time status of all active pairs, scanner stats, and recent scans."""
     return {
         "status": "ONLINE",
         "service": "AI Laser Scanner Central Signal Hub",
         "active_pairs_count": len(signal_cache.active_signals),
         "active_signals": signal_cache.active_signals,
+        "recent_scans": list(reversed(signal_cache.history))[:25],
         "stats": signal_cache.stats,
         "server_time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    }
+
+@app.get("/api/history")
+@app.get("/api/logs")
+def get_signal_history(limit: int = 50):
+    """Returns real-time scan history and audit logs."""
+    history = list(reversed(signal_cache.history))[:limit]
+    return {
+        "total_scans": signal_cache.stats["total_scans"],
+        "count": len(history),
+        "logs": history
     }
 
 @app.get("/api/signal")
@@ -925,15 +991,21 @@ async def handle_scan(
     Accepts mobile chart screenshots via multipart, base64 JSON, or pair query.
     Generates 100% deterministic, synchronized CALL or PUT signals using 145 candlestick patterns.
     """
+    client_ip = request.client.host if request.client else "unknown"
+    now_str = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+    print(f"\n=======================================================", flush=True)
+    print(f"📥 [API_SCAN RECEIVED] IP: {client_ip} | Time: {now_str} | Query Pair: {pair}", flush=True)
+
     signal_cache.stats["total_scans"] += 1
-    signal_cache.stats["last_mobile_scan"] = datetime.now(timezone.utc).strftime("%H:%M:%S")
-    signal_cache.stats["last_mobile_status"] = "Connected / Active"
+    signal_cache.stats["last_mobile_scan"] = now_str
+    signal_cache.stats["last_mobile_status"] = f"Connected ({client_ip})"
 
     image_bytes = None
     target_pair = pair
 
     if file:
         image_bytes = await file.read()
+        print(f"📁 [API_SCAN] Multipart upload received: {file.filename} ({len(image_bytes)} bytes)", flush=True)
     else:
         content_type = request.headers.get("content-type", "")
         if "multipart/form-data" in content_type:
@@ -944,8 +1016,9 @@ async def handle_scan(
                     image_bytes = await upload.read()
                 if not target_pair and form.get("pair"):
                     target_pair = str(form.get("pair"))
-            except Exception:
-                pass
+                print(f"📁 [API_SCAN] Form multipart parsed ({len(image_bytes) if image_bytes else 0} bytes)", flush=True)
+            except Exception as e:
+                print(f"⚠️ [API_SCAN ERROR] Form parse error: {e}", flush=True)
         elif "application/json" in content_type:
             try:
                 body = await request.json()
@@ -956,12 +1029,15 @@ async def handle_scan(
                     image_bytes = base64.b64decode(b64_str)
                 if not target_pair and body.get("pair"):
                     target_pair = str(body.get("pair"))
-            except Exception:
-                pass
+                print(f"📦 [API_SCAN] JSON payload received (Base64 image {len(image_bytes) if image_bytes else 0} bytes, pair: {target_pair})", flush=True)
+            except Exception as e:
+                print(f"⚠️ [API_SCAN ERROR] JSON parse error: {e}", flush=True)
 
     if image_bytes:
+        print(f"👁️ [API_SCAN] Running Gemini Vision AI + 145 Candlestick Pattern Engine...", flush=True)
         eval_result = evaluate_chart_with_gemini(image_bytes, target_pair)
     else:
+        print(f"⚙️ [API_SCAN] No image provided, running high-confluence mathematical engine...", flush=True)
         target_pair = target_pair or "EUR/USD OTC"
         now_dt = datetime.now(timezone.utc)
         eval_result = generate_pair_signal(target_pair, now_dt)
@@ -973,6 +1049,8 @@ async def handle_scan(
     # Check Minute-Lock Cache for this pair
     cached = signal_cache.get(pair_name)
     if cached is not None:
+        print(f"🔒 [API_SCAN CACHE HIT] {pair_name}: Returning locked signal {cached.get('signal')} ({cached.get('locked_key')})", flush=True)
+        print(f"=======================================================\n", flush=True)
         await manager.broadcast(cached)
         return cached
 
@@ -984,6 +1062,8 @@ async def handle_scan(
     eval_result["status"] = "ACTIVE" if sig in ["CALL", "PUT"] else "FILTERED"
 
     locked = signal_cache.set(pair_name, eval_result)
+    print(f"✅ [API_SCAN NEW LOCK] {pair_name} -> Signal: {sig} | Pattern: {locked.get('pattern_name')} | Key: {locked.get('locked_key')}", flush=True)
+    print(f"=======================================================\n", flush=True)
     await manager.broadcast(locked)
     return locked
 
