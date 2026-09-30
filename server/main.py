@@ -301,9 +301,13 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
             except Exception as ex:
                 continue
 
-    detected_pair = pair_hint or (raw_result.get("pair") if raw_result else None) or "LIVE_OTC"
-    if detected_pair in ["UNKNOWN", "", "NONE", None]:
-        detected_pair = pair_hint or "LIVE_OTC"
+    ai_pair = (raw_result.get("pair") if raw_result else None)
+    if ai_pair and ai_pair.upper() not in ["UNKNOWN", "", "NONE", "LIVE_OTC", "NULL"]:
+        detected_pair = ai_pair
+    elif pair_hint and pair_hint.upper() not in ["UNKNOWN", "", "NONE", "LIVE_OTC", "NULL"]:
+        detected_pair = pair_hint
+    else:
+        detected_pair = ai_pair or pair_hint or "EUR/USD OTC"
 
     if not raw_result:
         now_dt = datetime.now(timezone.utc)
