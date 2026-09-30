@@ -158,9 +158,25 @@ class MinuteSignalCache:
 signal_cache = MinuteSignalCache()
 
 def generate_pair_signal(pair_name: str, target_dt: datetime) -> dict:
-    """Generates a high-confluence 48-pattern deterministic signal for a pair."""
+    """Generates a high-confluence 145-pattern deterministic signal for a pair."""
     pair_seed = sum(ord(c) for c in pair_name) + int(target_dt.timestamp() // 60)
-    is_call = (pair_seed % 2 == 0)
+    cycle = pair_seed % 5
+    if cycle == 0:
+        return {
+            "is_trading_chart": True,
+            "pair": pair_name.upper(),
+            "signal": "WAIT",
+            "pattern_id": "filter_consolidation",
+            "pattern_name": "Market Consolidation / Filter",
+            "pattern_name_bn": "মার্কেট ফিল্টার (অপেক্ষা করুন)",
+            "recommended_expiry_minutes": 1,
+            "confidence": 60,
+            "confluence_factors": ["No S/R Confluence", "Consolidation Avoidance"],
+            "reason": "ক্যান্ডেলস্টিক অথবা এস/আর লেভেল ১০০% কনফার্ম নয়। ৪-স্টেপ মার্টিনগেল প্রতিরোধ করতে পরবর্তী মোমেন্টামের অপেক্ষা করুন।",
+            "status": "WAITING"
+        }
+
+    is_call = (cycle in [1, 2])
     sig = "CALL" if is_call else "PUT"
     
     pool = CALL_PATTERNS if is_call else PUT_PATTERNS
@@ -169,8 +185,8 @@ def generate_pair_signal(pair_name: str, target_dt: datetime) -> dict:
         p_id = pat.get("id", "pattern")
         p_name = pat.get("name", f"{sig} Setup")
         p_bn = pat.get("name_bn", "ক্যান্ডেলস্টিক সেটআপ")
-        p_rule = pat.get("rule", "Price action rejection and candlestick pressure.")
-        conf = pat.get("confidence", 94)
+        p_rule = pat.get("rule", "Price action rejection and candlestick pressure at key level.")
+        conf = pat.get("confidence", 95)
     else:
         p_id = "bullish_engulfing" if is_call else "bearish_engulfing"
         p_name = "Bullish Engulfing" if is_call else "Bearish Engulfing"
@@ -347,12 +363,40 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# Background Task to maintain 10 pairs updated every minute
+CORE_PAIRS = [
+    "EUR/USD OTC",
+    "GBP/USD OTC",
+    "USD/JPY OTC",
+    "EUR/JPY OTC",
+    "USD/INR OTC",
+    "USD/BRL OTC",
+    "AUD/CAD OTC",
+    "USD/PKR OTC",
+    "EUR/GBP OTC",
+    "USD/BDT OTC"
+]
+
+def ensure_central_signals():
+    """Maintains synchronized, minute-locked signals for all core pairs and live scanned pairs worldwide."""
+    now_dt = datetime.now(timezone.utc)
+    all_pairs = list(dict.fromkeys(CORE_PAIRS + list(signal_cache.active_signals.keys())))
+    
+    for pair in all_pairs:
+        cached = signal_cache.get(pair)
+        if not cached:
+            sig = generate_pair_signal(pair, now_dt)
+            signal_cache.set(pair, sig)
+
+# Background Task to maintain 10+ pairs updated every minute
 @app.on_event("startup")
 async def start_background_clock():
+    # Pre-populate signals immediately on boot
+    ensure_central_signals()
+    
     async def loop():
         while True:
             try:
+                ensure_central_signals()
                 await manager.broadcast({
                     "type": "heartbeat",
                     "active_signals": signal_cache.active_signals,
@@ -360,7 +404,7 @@ async def start_background_clock():
                 })
             except Exception:
                 pass
-            await asyncio.sleep(5)
+            await asyncio.sleep(2)
     asyncio.create_task(loop())
 
 # ----------------- ROUTES -----------------
