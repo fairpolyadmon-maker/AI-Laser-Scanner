@@ -69,24 +69,39 @@ CRITICAL TRADING MANDATE (DIRECT WIN / SURESHOT STANDARD):
 Our goal is strictly DIRECT WIN (Non-MTG) or MAXIMUM 1-Step Martingale. NEVER FORCE A TRADE ON NOISY CANDLES!
 4-step Martingale occurs when trading random candles without confluence. You MUST apply strict price action filters:
 
-1. GOLDEN CONFLUENCE RULES FOR CALL (UP / BUY / Green Candle):
-   - MUST HAVE AT LEAST TWO CONFLUENCES:
-     a) Key Support Bounce: Candle touches/bounces from a clear horizontal Support Level, Demand Zone, or Previous Resistance Retest (BOS).
-     b) Lower Wick Rejection: Long lower shadow showing strong buyers actively rejecting lower prices.
-     c) Trend Alignment: Prevailing Uptrend (higher highs/lows) OR undeniable False Breakdown (Bear Trap) reclaim.
-     d) Master Bullish Pattern: Bullish Engulfing, Hammer, Bullish Pin Bar, Morning Star, Piercing Line, Rising Three Methods.
+0. MANDATORY 5-CANDLE SEQUENCE ANALYSIS:
+   - Carefully inspect the LAST 5 CANDLES on the rightmost side of the chart (Candles 1, 2, 3, 4, and latest candle 5).
+   - Determine the prevailing 5-candle momentum:
+     * If 3 or more of the last 5 candles are RED and making lower lows: THE MARKET IS IN DOWNTREND!
+       CRITICAL: NEVER EMIT "CALL" IN A DOWNTREND unless Rule 1 (Support Double Green) is 100% confirmed!
+       If it continues downward, EMIT "PUT" (Trend Continuation) or "WAIT".
+     * If 3 or more of the last 5 candles are GREEN and making higher highs: THE MARKET IS IN UPTREND!
+       CRITICAL: NEVER EMIT "PUT" IN AN UPTREND unless Rule 2 (Resistance Double Red) is 100% confirmed!
+       If it continues upward, EMIT "CALL" (Trend Continuation) or "WAIT".
 
-2. GOLDEN CONFLUENCE RULES FOR PUT (DOWN / SELL / Red Candle):
-   - MUST HAVE AT LEAST TWO CONFLUENCES:
-     a) Key Resistance Rejection: Candle rejects from a clear horizontal Resistance Level, Supply Zone, or Previous Support Breakdown Retest (BOS).
-     b) Upper Wick Rejection: Long upper shadow showing strong sellers actively rejecting higher prices.
-     c) Trend Alignment: Prevailing Downtrend (lower highs/lows) OR undeniable False Breakout (Bull Trap) breakdown.
-     d) Master Bearish Pattern: Bearish Engulfing, Shooting Star, Bearish Pin Bar, Evening Star, Dark Cloud Cover, Falling Three Methods.
+1. USER SPECIAL RULE 1 - SUPPORT BOUNCE DOUBLE GREEN (100% SURESHOT CALL):
+   - Price touches/tests Support level (lowest point of recent candles) or bounces from demand zone.
+   - Followed by TWO CONSECUTIVE GREEN CANDLES (ক্যান্ডেল ৪ ও ৫ দুটিই সবুজ এবং উপরে ক্লোজ হয়েছে).
+   - Buyers have fully overwhelmed sellers -> NEXT CANDLE IS GUARANTEED "CALL" (UP / GREEN)!
+   - Pattern ID: "support_consecutive_two_green"
+   - Pattern Name: "Support Bounce Double Green (সাপোর্ট থেকে পরপর ২টি সবুজ ক্যান্ডেল)"
 
-3. SAFETY FILTER -> EMIT "WAIT" (NO TRADE):
-   - If the candle is a tiny Doji, spinning top, flat consolidation, or price is hovering in the middle between Support and Resistance.
-   - If momentum is completely conflicting (e.g. attempting to BUY directly into a massive downward red momentum streak without support).
-   - If there is NO clear rejection or the setup is 50/50: RETURN "signal": "WAIT". Protecting capital from 4-step MTG is priority #1!
+2. USER SPECIAL RULE 2 - RESISTANCE REJECTION DOUBLE RED (100% SURESHOT PUT):
+   - Price touches/tests Resistance level (highest point of recent candles) or supply zone.
+   - Followed by TWO CONSECUTIVE RED CANDLES (ক্যান্ডেল ৪ ও ৫ দুটিই লাল এবং নিচে ক্লোজ হয়েছে).
+   - Sellers have fully overwhelmed buyers -> NEXT CANDLE IS GUARANTEED "PUT" (DOWN / RED)!
+   - Pattern ID: "resistance_consecutive_two_red"
+   - Pattern Name: "Resistance Rejection Double Red (রেজিস্ট্যান্স থেকে পরপর ২টি লাল ক্যান্ডেল)"
+
+3. GOLDEN CONFLUENCE RULES FOR CALL (UP / BUY / Green Candle):
+   - Key Support Bounce, Lower Wick Rejection, or Master Bullish Pattern (Engulfing, Hammer, Morning Star).
+
+4. GOLDEN CONFLUENCE RULES FOR PUT (DOWN / SELL / Red Candle):
+   - Key Resistance Rejection, Upper Wick Rejection, or Master Bearish Pattern (Engulfing, Shooting Star, Evening Star).
+
+5. SAFETY FILTER -> EMIT "WAIT" (NO TRADE):
+   - If candle is a tiny Doji, spinning top, alternating colors without direction, or mid-range consolidation.
+   - If momentum is conflicting: RETURN "signal": "WAIT". Protecting capital from 4-step MTG is priority #1!
 
 Read the currency/asset pair name from the chart header (e.g. "EUR/USD OTC", "GBP/USD", "USD/INR OTC") or default to "LIVE_OTC".
 

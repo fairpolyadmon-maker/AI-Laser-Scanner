@@ -1,5 +1,5 @@
 {
-  "total_patterns": 145,
+  "total_patterns": 147,
   "description": "AI Laser Scanner Master 145 Candlestick Patterns & Technical Confluence Knowledge Base",
   "patterns": [
     {
@@ -1741,6 +1741,30 @@
       "rule": "Final selling exhaustion triangle candle formation terminating downtrend definitively.",
       "recommended_expiry_minutes": 1,
       "confidence": 95
+    },
+    {
+      "pattern_number": 146,
+      "id": "support_consecutive_two_green",
+      "name": "Support Bounce Double Green",
+      "name_bn": "সাপোর্ট থেকে পরপর ২টি সবুজ ক্যান্ডেল (Support Double Green)",
+      "signal": "CALL",
+      "category": "Support Bounce Momentum",
+      "location": "Support Zone",
+      "rule": "সাপোর্ট লেভেল বাউন্স করার পর পরপর দুটি শক্তিশালী সবুজ ক্যান্ডেল তৈরি হয়ে উপরে ক্লোজ হওয়া। নিশ্চিত আপট্রেন্ড শুরু (100% SureShot)।",
+      "recommended_expiry_minutes": 1,
+      "confidence": 98
+    },
+    {
+      "pattern_number": 147,
+      "id": "resistance_consecutive_two_red",
+      "name": "Resistance Rejection Double Red",
+      "name_bn": "রেজিস্ট্যান্স থেকে পরপর ২টি লাল ক্যান্ডেল (Resistance Double Red)",
+      "signal": "PUT",
+      "category": "Resistance Rejection Momentum",
+      "location": "Resistance Zone",
+      "rule": "রেজিস্ট্যান্স লেভেল রিজেক্ট করার পর পরপর দুটি শক্তিশালী লাল ক্যান্ডেল তৈরি হয়ে নিচে ক্লোজ হওয়া। নিশ্চিত ডাউনট্রেন্ড শুরু (100% SureShot)।",
+      "recommended_expiry_minutes": 1,
+      "confidence": 98
     }
   ]
 }
