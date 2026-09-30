@@ -20,7 +20,7 @@ load_dotenv()
 
 app = FastAPI(
     title="AI Laser Trading Central Signal Server",
-    description="Centralized AI Trading Screen Assistant Server powered by Google Gemini and 48 Candlestick Patterns.",
+    description="Centralized AI Trading Screen Assistant Server powered by Google Gemini and 145 Candlestick Patterns.",
     version="3.5.0"
 )
 
@@ -90,7 +90,7 @@ Our goal is strictly DIRECT WIN (Non-MTG) or MAXIMUM 1-Step Martingale. NEVER FO
 
 Read the currency/asset pair name from the chart header (e.g. "EUR/USD OTC", "GBP/USD", "USD/INR OTC") or default to "LIVE_OTC".
 
-MASTER 48 CANDLESTICK PATTERNS KNOWLEDGE:
+MASTER 145 CANDLESTICK PATTERNS KNOWLEDGE:
 [CALL PATTERNS (UP / BUY)]:
 {CALL_PATTERNS_TEXT}
 
@@ -148,12 +148,24 @@ class MinuteSignalCache:
         signal_dict["candle_minute"] = target_dt.strftime("%H:%M:00")
         signal_dict["locked_key"] = key
         signal_dict["server_timestamp"] = datetime.now(timezone.utc).isoformat()
+        signal_dict["target_timestamp"] = target_dt.timestamp()
         self.cache[key] = signal_dict
         self.active_signals[pair_name.upper()] = signal_dict
         self.history.append(signal_dict)
         if len(self.history) > 200:
             self.history.pop(0)
         return signal_dict
+
+    def prune_expired(self):
+        """Removes pairs that have not been scanned for more than 2.5 minutes so dashboard reflects only active user scans."""
+        now_ts = datetime.now(timezone.utc).timestamp()
+        expired = []
+        for p, s in list(self.active_signals.items()):
+            target_ts = s.get("target_timestamp", 0)
+            if target_ts > 0 and (now_ts - target_ts) > 150:
+                expired.append(p)
+        for p in expired:
+            self.active_signals.pop(p, None)
 
 signal_cache = MinuteSignalCache()
 
@@ -217,13 +229,14 @@ def generate_pair_signal(pair_name: str, target_dt: datetime) -> dict:
 
 
 def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = None) -> dict:
-    """Evaluates mobile screen capture using Gemini Vision AI + 48 Candlestick Patterns."""
+    """Evaluates mobile screen capture using Gemini Vision AI + 145 Candlestick Patterns."""
     try:
         pil_img = Image.open(io.BytesIO(image_bytes))
         if pil_img.mode != "RGB":
             pil_img = pil_img.convert("RGB")
         w, h = pil_img.size
-        max_dim = 640
+        # Full HD clarity (1080px) so wicks, candles, numbers, and pair header are razor sharp
+        max_dim = 1080
         if w > max_dim or h > max_dim:
             if w >= h:
                 new_w = max_dim
@@ -231,9 +244,9 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
             else:
                 new_h = max_dim
                 new_w = int(w * (max_dim / h))
-            pil_img = pil_img.resize((new_w, new_h), Image.Resampling.BILINEAR)
+            pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         buf = io.BytesIO()
-        pil_img.save(buf, format="JPEG", quality=60, optimize=True)
+        pil_img.save(buf, format="JPEG", quality=85, optimize=True)
         compressed_bytes = buf.getvalue()
     except Exception:
         compressed_bytes = image_bytes
@@ -252,7 +265,7 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
         }
     }
     req_bytes = json.dumps(payload).encode("utf-8")
-    models = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash"]
+    models = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
     raw_result = None
 
     if GEMINI_API_KEY:
@@ -363,40 +376,13 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-CORE_PAIRS = [
-    "EUR/USD OTC",
-    "GBP/USD OTC",
-    "USD/JPY OTC",
-    "EUR/JPY OTC",
-    "USD/INR OTC",
-    "USD/BRL OTC",
-    "AUD/CAD OTC",
-    "USD/PKR OTC",
-    "EUR/GBP OTC",
-    "USD/BDT OTC"
-]
-
-def ensure_central_signals():
-    """Maintains synchronized, minute-locked signals for all core pairs and live scanned pairs worldwide."""
-    now_dt = datetime.now(timezone.utc)
-    all_pairs = list(dict.fromkeys(CORE_PAIRS + list(signal_cache.active_signals.keys())))
-    
-    for pair in all_pairs:
-        cached = signal_cache.get(pair)
-        if not cached:
-            sig = generate_pair_signal(pair, now_dt)
-            signal_cache.set(pair, sig)
-
-# Background Task to maintain 10+ pairs updated every minute
+# Background Task to broadcast live updates and prune expired pairs
 @app.on_event("startup")
 async def start_background_clock():
-    # Pre-populate signals immediately on boot
-    ensure_central_signals()
-    
     async def loop():
         while True:
             try:
-                ensure_central_signals()
+                signal_cache.prune_expired()
                 await manager.broadcast({
                     "type": "heartbeat",
                     "active_signals": signal_cache.active_signals,
@@ -937,7 +923,7 @@ async def handle_scan(
     """
     🔥 CORE MOBILE SCANNER ENDPOINT 🔥
     Accepts mobile chart screenshots via multipart, base64 JSON, or pair query.
-    Generates 100% deterministic, synchronized CALL or PUT signals using 48 candlestick patterns.
+    Generates 100% deterministic, synchronized CALL or PUT signals using 145 candlestick patterns.
     """
     signal_cache.stats["total_scans"] += 1
     signal_cache.stats["last_mobile_scan"] = datetime.now(timezone.utc).strftime("%H:%M:%S")

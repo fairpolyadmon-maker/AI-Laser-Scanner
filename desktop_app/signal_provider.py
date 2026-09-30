@@ -27,12 +27,14 @@ env_path = os.path.join(APP_DIR, ".env")
 load_dotenv(env_path)
 
 API_KEY = os.environ.get("GEMINI_API_KEY", "")
-PATTERNS_FILE = os.path.join(APP_DIR, "patterns", "candlestick_memory_48.json")
+PATTERNS_FILE = os.path.join(APP_DIR, "patterns", "candlestick_memory_master.json")
+if not os.path.exists(PATTERNS_FILE):
+    PATTERNS_FILE = os.path.join(APP_DIR, "patterns", "candlestick_memory_48.json")
 
 class SignalProvider:
     """
     Master Signal Provider Engine for AI Laser Scanner.
-    Powered by 48 Master Candlestick Patterns & Technical Confluence Analysis.
+    Powered by 145 Master Candlestick Patterns & Technical Confluence Analysis.
     """
     def __init__(self, api_key=None):
         self.api_key = api_key or API_KEY

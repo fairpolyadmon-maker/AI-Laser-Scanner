@@ -2,7 +2,9 @@ import os
 import json
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-JSON_PATH = os.path.join(BASE_DIR, "patterns", "candlestick_memory_48.json")
+JSON_PATH = os.path.join(BASE_DIR, "patterns", "candlestick_memory_master.json")
+if not os.path.exists(JSON_PATH):
+    JSON_PATH = os.path.join(BASE_DIR, "patterns", "candlestick_memory_48.json")
 
 def get_all_patterns():
     if os.path.exists(JSON_PATH):
@@ -31,11 +33,11 @@ def load_patterns_prompt():
         else:
             put_patterns_list.append(f"- {p_id}: {p_desc}")
 
-    call_text = "\n".join(call_patterns_list[:24])
-    put_text = "\n".join(put_patterns_list[:24])
+    call_text = "\n".join(call_patterns_list)
+    put_text = "\n".join(put_patterns_list)
 
     prompt = f"""You are the world's most elite Binary Options and Candlestick Pattern Recognition AI Analyst.
-You possess complete knowledge of 48 Master Candlestick Patterns and Price Action Confluence.
+You possess complete knowledge of {len(patterns)} Master Candlestick Patterns and Price Action Confluence.
 
 Analyze this trading screen:
 

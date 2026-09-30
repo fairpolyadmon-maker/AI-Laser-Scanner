@@ -19,10 +19,11 @@ if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
 # Candlestick patterns path
-PATTERNS_FILE = os.path.join(BUNDLE_DIR, "patterns", "candlestick_memory_48.json")
+PATTERNS_FILE = os.path.join(BUNDLE_DIR, "patterns", "candlestick_memory_master.json")
 if not os.path.exists(PATTERNS_FILE):
-    # Fallback to current directory or desktop_app directory
-    alt_file = os.path.join(APP_DIR, "patterns", "candlestick_memory_48.json")
+    PATTERNS_FILE = os.path.join(BUNDLE_DIR, "patterns", "candlestick_memory_48.json")
+if not os.path.exists(PATTERNS_FILE):
+    alt_file = os.path.join(APP_DIR, "patterns", "candlestick_memory_master.json")
     if os.path.exists(alt_file):
         PATTERNS_FILE = alt_file
 
