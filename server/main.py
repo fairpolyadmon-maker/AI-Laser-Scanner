@@ -36,7 +36,9 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "laser_admin_secure_2026")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PATTERNS_JSON_PATH = os.path.join(BASE_DIR, "patterns", "candlestick_memory_48.json")
+PATTERNS_JSON_PATH = os.path.join(BASE_DIR, "patterns", "candlestick_memory_master.json")
+if not os.path.exists(PATTERNS_JSON_PATH):
+    PATTERNS_JSON_PATH = os.path.join(BASE_DIR, "patterns", "candlestick_memory_48.json")
 CALL_WAV_PATH = os.path.join(BASE_DIR, "call_alert.wav")
 PUT_WAV_PATH = os.path.join(BASE_DIR, "put_alert.wav")
 
@@ -56,20 +58,35 @@ PUT_PATTERNS = [p for p in MASTER_PATTERNS if p.get("signal") == "PUT"]
 call_list = [f"- {p.get('id')}: {p.get('name')} ({p.get('name_bn')}) -> {p.get('rule')}" for p in CALL_PATTERNS]
 put_list = [f"- {p.get('id')}: {p.get('name')} ({p.get('name_bn')}) -> {p.get('rule')}" for p in PUT_PATTERNS]
 
-CALL_PATTERNS_TEXT = "\n".join(call_list[:24])
-PUT_PATTERNS_TEXT = "\n".join(put_list[:24])
+CALL_PATTERNS_TEXT = "\n".join(call_list)
+PUT_PATTERNS_TEXT = "\n".join(put_list)
 
 SYSTEM_VISION_PROMPT = f"""
 You are the world's most elite Binary Options & Candlestick Pattern Recognition AI Analyst.
 You analyze live candlestick trading charts from Quotex, Pocket Option, TradingView, IQ Option, Binomo, etc.
 
-CRITICAL MANDATE:
-You MUST determine a definitive trade direction for the upcoming :00 candle: EITHER "CALL" OR "PUT".
-NEVER output "WAIT" or "READY". A definitive trading signal is strictly required on every scan.
-- Objectively weigh both Buyers (CALL) and Sellers (PUT) equally.
-- Output "CALL" (UP / BUY / Green Candle) if buyers' momentum, support bounce, lower wick rejection, green engulfing, hammer, pin bar, or bullish continuation is present.
-- Output "PUT" (DOWN / SELL / Red Candle) if sellers' momentum, resistance rejection, upper wick rejection, red engulfing, shooting star, or bearish continuation is present.
-- DO NOT bias towards PUT or CALL. Give an accurate, unbiased trade direction based on the current candlestick formation.
+CRITICAL TRADING MANDATE (DIRECT WIN / SURESHOT STANDARD):
+Our goal is strictly DIRECT WIN (Non-MTG) or MAXIMUM 1-Step Martingale. NEVER FORCE A TRADE ON NOISY CANDLES!
+4-step Martingale occurs when trading random candles without confluence. You MUST apply strict price action filters:
+
+1. GOLDEN CONFLUENCE RULES FOR CALL (UP / BUY / Green Candle):
+   - MUST HAVE AT LEAST TWO CONFLUENCES:
+     a) Key Support Bounce: Candle touches/bounces from a clear horizontal Support Level, Demand Zone, or Previous Resistance Retest (BOS).
+     b) Lower Wick Rejection: Long lower shadow showing strong buyers actively rejecting lower prices.
+     c) Trend Alignment: Prevailing Uptrend (higher highs/lows) OR undeniable False Breakdown (Bear Trap) reclaim.
+     d) Master Bullish Pattern: Bullish Engulfing, Hammer, Bullish Pin Bar, Morning Star, Piercing Line, Rising Three Methods.
+
+2. GOLDEN CONFLUENCE RULES FOR PUT (DOWN / SELL / Red Candle):
+   - MUST HAVE AT LEAST TWO CONFLUENCES:
+     a) Key Resistance Rejection: Candle rejects from a clear horizontal Resistance Level, Supply Zone, or Previous Support Breakdown Retest (BOS).
+     b) Upper Wick Rejection: Long upper shadow showing strong sellers actively rejecting higher prices.
+     c) Trend Alignment: Prevailing Downtrend (lower highs/lows) OR undeniable False Breakout (Bull Trap) breakdown.
+     d) Master Bearish Pattern: Bearish Engulfing, Shooting Star, Bearish Pin Bar, Evening Star, Dark Cloud Cover, Falling Three Methods.
+
+3. SAFETY FILTER -> EMIT "WAIT" (NO TRADE):
+   - If the candle is a tiny Doji, spinning top, flat consolidation, or price is hovering in the middle between Support and Resistance.
+   - If momentum is completely conflicting (e.g. attempting to BUY directly into a massive downward red momentum streak without support).
+   - If there is NO clear rejection or the setup is 50/50: RETURN "signal": "WAIT". Protecting capital from 4-step MTG is priority #1!
 
 Read the currency/asset pair name from the chart header (e.g. "EUR/USD OTC", "GBP/USD", "USD/INR OTC") or default to "LIVE_OTC".
 
@@ -80,24 +97,18 @@ MASTER 48 CANDLESTICK PATTERNS KNOWLEDGE:
 [PUT PATTERNS (DOWN / SELL)]:
 {PUT_PATTERNS_TEXT}
 
-PRICE ACTION CONFLUENCE:
-- S&R Level Bounce or Breakout
-- Wick Rejection & Pressure
-- 21 EMA Trend Direction
-- Candlestick Psychology & Reaction
-
 RETURN VALID JSON ONLY:
 {{
   "is_trading_chart": true,
   "pair": "EUR/USD OTC",
-  "signal": "CALL" | "PUT",
+  "signal": "CALL" | "PUT" | "WAIT",
   "pattern_id": "<pattern_id>",
   "pattern_name": "<Pattern Name>",
   "pattern_name_bn": "<প্যাটার্নের বাংলা নাম>",
   "recommended_expiry_minutes": 1,
   "confidence": 95,
-  "confluence_factors": ["Wick Rejection", "Candlestick Reaction", "Trend Momentum"],
-  "reason": "<Detailed technical rationale>"
+  "confluence_factors": ["Support/Resistance Confluence", "Wick Rejection", "Trend Momentum"],
+  "reason": "<Detailed technical rationale explaining S/R bounce, wick pressure, and why this is a Direct Win setup>"
 }}
 """
 
@@ -255,16 +266,46 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
         return generate_pair_signal(detected_pair, now_dt)
 
     sig = str(raw_result.get("signal", "")).upper().strip()
+    if sig == "WAIT":
+        return {
+            "is_trading_chart": True,
+            "pair": detected_pair.upper(),
+            "signal": "WAIT",
+            "pattern_id": raw_result.get("pattern_id", "filter_consolidation"),
+            "pattern_name": raw_result.get("pattern_name", "Market Consolidation / Filter"),
+            "pattern_name_bn": raw_result.get("pattern_name_bn", "মার্কেট ফিল্টার (অপেক্ষা করুন)"),
+            "recommended_expiry_minutes": 1,
+            "confidence": int(raw_result.get("confidence", 60)),
+            "confluence_factors": raw_result.get("confluence_factors", ["No S/R Confluence", "Uncertain Momentum"]),
+            "reason": raw_result.get("reason", "ক্যান্ডেলস্টিক অথবা এস/আর লেভেল ১০০% কনফার্ম নয়। ৪-স্টেপ মার্টিনগেল প্রতিরোধ করতে পরবর্তী মোমেন্টামের অপেক্ষা করুন।"),
+            "status": "WAITING"
+        }
+
     if sig not in ["CALL", "PUT"]:
         pat_txt = (str(raw_result.get("pattern_name", "")) + " " + str(raw_result.get("reason", "")) + " " + str(raw_result.get("pattern_id", ""))).lower()
         call_score = sum(1 for w in ["bull", "call", "hammer", "bottom", "green", "up", "bounce", "lower wick", "support", "piercing", "morning", "soldier"] if w in pat_txt)
         put_score = sum(1 for w in ["bear", "put", "star", "top", "red", "down", "upper wick", "resistance", "dark cloud", "evening", "crow"] if w in pat_txt)
-        if call_score > put_score:
+        if call_score > put_score and call_score >= 2:
             sig = "CALL"
-        elif put_score > call_score:
+        elif put_score > call_score and put_score >= 2:
             sig = "PUT"
         else:
-            sig = "CALL" if ((int(time.time()) // 60) % 2 == 0) else "PUT"
+            sig = "WAIT"
+
+    if sig == "WAIT":
+        return {
+            "is_trading_chart": True,
+            "pair": detected_pair.upper(),
+            "signal": "WAIT",
+            "pattern_id": "filter_consolidation",
+            "pattern_name": "Market Consolidation",
+            "pattern_name_bn": "মার্কেট ফিল্টার (অপেক্ষা করুন)",
+            "recommended_expiry_minutes": 1,
+            "confidence": 60,
+            "confluence_factors": ["No S/R Confluence", "Consolidation / Doji"],
+            "reason": "ক্যান্ডেলস্টিক অথবা এস/আর লেভেল ১০০% কনফার্ম নয়। পরবর্তী স্পষ্ট সেটআপের জন্য অপেক্ষা করুন।",
+            "status": "WAITING"
+        }
 
     bn_name = raw_result.get("pattern_name_bn")
     if not bn_name or bn_name in ["ক্যান্ডেলস্টিক সেটআপ", ""]:
@@ -279,8 +320,8 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
         "pattern_name_bn": bn_name,
         "recommended_expiry_minutes": int(raw_result.get("recommended_expiry_minutes", 1)),
         "confidence": int(raw_result.get("confidence", 95)),
-        "confluence_factors": raw_result.get("confluence_factors", ["Price Action Reaction", "Key S/R Level"]),
-        "reason": raw_result.get("reason", "Candlestick price action momentum and wick rejection."),
+        "confluence_factors": raw_result.get("confluence_factors", ["Support/Resistance Confluence", "Wick Rejection", "Trend Momentum"]),
+        "reason": raw_result.get("reason", "Candlestick price action momentum and wick rejection at key level."),
         "status": "ACTIVE"
     }
 
@@ -547,6 +588,12 @@ def get_dashboard_html():
     border: 1px solid #ef4444;
     box-shadow: 0 0 16px rgba(239, 68, 68, 0.3);
   }
+  .sig-wait {
+    background: #334155;
+    color: #f1f5f9;
+    border: 1px solid #64748b;
+    box-shadow: 0 0 12px rgba(100, 116, 139, 0.3);
+  }
   .meta {
     font-size: 13px;
     line-height: 1.8;
@@ -729,18 +776,30 @@ def get_dashboard_html():
         pairs.forEach(p => {
           const item = data.active_signals[p];
           const isCall = item.signal === 'CALL';
-          const cls = isCall ? 'sig-call' : 'sig-put';
+          const isPut = item.signal === 'PUT';
+          let cls = 'sig-wait';
+          let sigText = '⏳ WAIT / FILTER';
+
+          if (isCall) {
+            cls = 'sig-call';
+            sigText = 'CALL (1m)';
+          } else if (isPut) {
+            cls = 'sig-put';
+            sigText = 'PUT (1m)';
+          }
 
           // Check if new signal arrived
           if (item.locked_key && lastSignalKeys[p] && lastSignalKeys[p] !== item.locked_key) {
-            playAlert(item.signal);
+            if (isCall || isPut) {
+              playAlert(item.signal);
+            }
           }
           lastSignalKeys[p] = item.locked_key;
 
           newHtml += `
             <div class="card">
               <div class="pair-title">📊 ${item.pair || p}</div>
-              <div class="sig-box ${cls}">${item.signal} (${item.recommended_expiry_minutes || 1}m)</div>
+              <div class="sig-box ${cls}">${sigText}</div>
               <div class="meta">
                 🎯 <b>প্যাটার্ন:</b> ${item.pattern_name || 'Price Action'} (${item.pattern_name_bn || ''})<br>
                 ⏱️ <b>টার্গেট ক্যান্ডেল:</b> ${item.candle_minute || 'Next Minute'}<br>
@@ -888,11 +947,11 @@ async def handle_scan(
         return cached
 
     # Lock this new signal for this candle minute
-    sig = eval_result.get("signal", "CALL")
-    if sig not in ["CALL", "PUT"]:
-        sig = "CALL"
+    sig = eval_result.get("signal", "WAIT")
+    if sig not in ["CALL", "PUT", "WAIT"]:
+        sig = "WAIT"
     eval_result["signal"] = sig
-    eval_result["status"] = "ACTIVE"
+    eval_result["status"] = "ACTIVE" if sig in ["CALL", "PUT"] else "FILTERED"
 
     locked = signal_cache.set(pair_name, eval_result)
     await manager.broadcast(locked)
