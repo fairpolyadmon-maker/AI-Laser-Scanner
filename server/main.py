@@ -5,9 +5,28 @@ import json
 import time
 import base64
 import asyncio
+import logging
 import urllib.request
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict
+
+# Ensure real-time unbuffered logging in Render and cloud containers
+try:
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(line_buffering=True)
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(line_buffering=True)
+except Exception:
+    pass
+os.environ["PYTHONUNBUFFERED"] = "1"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("laser_server")
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -103,7 +122,15 @@ Our goal is strictly DIRECT WIN (Non-MTG) or MAXIMUM 1-Step Martingale. NEVER FO
    - If candle is a tiny Doji, spinning top, alternating colors without direction, or mid-range consolidation.
    - If momentum is conflicting: RETURN "signal": "WAIT". Protecting capital from 4-step MTG is priority #1!
 
-Read the currency/asset pair name from the chart header (e.g. "EUR/USD OTC", "GBP/USD", "USD/INR OTC") or default to "LIVE_OTC".
+CRITICAL PAIR IDENTIFICATION MANDATE (TOP PRIORITY):
+- The user is executing a live trade on the specific asset shown on this chart.
+- You MUST locate and extract the EXACT currency pair or asset name currently displayed on the broker screen (Quotex, Pocket Option, Binomo, IQ Option, etc.).
+- Scan the top-left tab, broker asset bar, or large background chart watermark:
+  * For Quotex OTC assets: e.g. "USD/BDT (OTC)", "EUR/USD (OTC)", "GBP/USD (OTC)", "USD/INR (OTC)", "USD/PKR (OTC)", "USD/BRL (OTC)", "USD/EGP (OTC)", "EUR/JPY (OTC)", etc.
+  * For Normal Forex: e.g. "EUR/USD", "GBP/USD", "USD/JPY", "AUD/CAD", etc.
+  * For Cryptocurrencies / Indices: e.g. "BTC/USD", "ETH/USD", "Crypto IDX".
+- CRITICAL: Never return "LIVE_OTC", "UNKNOWN", "NONE", "READY", or a fabricated pair name!
+- You MUST output the exact characters of the pair being traded on the chart into the "pair" field.
 
 MASTER 145 CANDLESTICK PATTERNS KNOWLEDGE:
 [CALL PATTERNS (UP / BUY)]:
@@ -115,7 +142,7 @@ MASTER 145 CANDLESTICK PATTERNS KNOWLEDGE:
 RETURN VALID JSON ONLY:
 {{
   "is_trading_chart": true,
-  "pair": "EUR/USD OTC",
+  "pair": "<EXACT_PAIR_NAME_FROM_SCREEN_E.G._USD/BDT_(OTC)>",
   "signal": "CALL" | "PUT" | "WAIT",
   "pattern_id": "<pattern_id>",
   "pattern_name": "<Pattern Name>",
@@ -243,8 +270,29 @@ def generate_pair_signal(pair_name: str, target_dt: datetime) -> dict:
 
 
 
+def normalize_pair_name(raw_pair: Optional[str]) -> Optional[str]:
+    """Clean and standardize broker currency/asset pair names."""
+    if not raw_pair:
+        return None
+    p = str(raw_pair).strip(" \t\n\r\"'{}[]<>()")
+    if p.upper() in ["UNKNOWN", "NONE", "LIVE_OTC", "NULL", "", "READY", "FILTER_CONSOLIDATION"]:
+        return None
+    if "<EXACT" in p.upper() or "PATTERN" in p.upper():
+        return None
+
+    # Standardize OTC naming: e.g. "USD/BDT OTC", "USDBDT OTC", "USD/BDT(OTC)" -> "USD/BDT (OTC)"
+    m = re.match(r'^([A-Za-z]{3})[/\-_]?([A-Za-z]{3})\s*(?:\(?OTC\)?)?$', p, re.IGNORECASE)
+    if m:
+        c1, c2 = m.group(1).upper(), m.group(2).upper()
+        is_otc = "OTC" in p.upper()
+        return f"{c1}/{c2} (OTC)" if is_otc else f"{c1}/{c2}"
+
+    return p
+
+
 def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = None) -> dict:
     """Evaluates mobile screen capture using Gemini Vision AI + 145 Candlestick Patterns."""
+    t_start = time.time()
     try:
         pil_img = Image.open(io.BytesIO(image_bytes))
         if pil_img.mode != "RGB":
@@ -265,6 +313,9 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
         compressed_bytes = buf.getvalue()
     except Exception:
         compressed_bytes = image_bytes
+        w, h = 0, 0
+
+    logger.info(f"🔍 [GEMINI VISION] Analyzing chart image ({w}x{h}, {len(compressed_bytes)//1024} KB | Hint: {pair_hint or 'None'})...")
 
     b64_data = base64.b64encode(compressed_bytes).decode("utf-8")
     payload = {
@@ -286,6 +337,7 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
     if GEMINI_API_KEY:
         for m in models:
             try:
+                m_start = time.time()
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={GEMINI_API_KEY}"
                 req = urllib.request.Request(url, data=req_bytes, headers={"Content-Type": "application/json"})
                 with urllib.request.urlopen(req, timeout=12) as resp:
@@ -297,19 +349,21 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
                             text_val = text_val[4:].strip()
                     raw_result = json.loads(text_val)
                     if raw_result:
+                        m_dur = round(time.time() - m_start, 2)
+                        logger.info(f"⚡ [GEMINI VISION SUCCESS] Model {m} responded in {m_dur}s")
                         break
             except Exception as ex:
+                logger.warning(f"⚠️ [GEMINI VISION WARNING] Model {m} failed: {ex}")
                 continue
 
-    ai_pair = (raw_result.get("pair") if raw_result else None)
-    if ai_pair and ai_pair.upper() not in ["UNKNOWN", "", "NONE", "LIVE_OTC", "NULL"]:
-        detected_pair = ai_pair
-    elif pair_hint and pair_hint.upper() not in ["UNKNOWN", "", "NONE", "LIVE_OTC", "NULL"]:
-        detected_pair = pair_hint
-    else:
-        detected_pair = ai_pair or pair_hint or "EUR/USD OTC"
+    ai_pair = normalize_pair_name(raw_result.get("pair") if raw_result else None)
+    hint_pair = normalize_pair_name(pair_hint)
+    detected_pair = ai_pair or hint_pair or "EUR/USD (OTC)"
+
+    logger.info(f"🎯 [PAIR IDENTIFICATION] AI Detected: '{ai_pair}' | Client Hint: '{hint_pair}' | Trading Pair: >>> {detected_pair} <<<")
 
     if not raw_result:
+        logger.warning(f"⚠️ [GEMINI VISION] No AI response, utilizing mathematical confluence engine for {detected_pair}...")
         now_dt = datetime.now(timezone.utc)
         return generate_pair_signal(detected_pair, now_dt)
 
@@ -317,7 +371,7 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
     if sig == "WAIT":
         return {
             "is_trading_chart": True,
-            "pair": detected_pair.upper(),
+            "pair": detected_pair,
             "signal": "WAIT",
             "pattern_id": raw_result.get("pattern_id", "filter_consolidation"),
             "pattern_name": raw_result.get("pattern_name", "Market Consolidation / Filter"),
@@ -343,7 +397,7 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
     if sig == "WAIT":
         return {
             "is_trading_chart": True,
-            "pair": detected_pair.upper(),
+            "pair": detected_pair,
             "signal": "WAIT",
             "pattern_id": "filter_consolidation",
             "pattern_name": "Market Consolidation",
@@ -359,9 +413,12 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
     if not bn_name or bn_name in ["ক্যান্ডেলস্টিক সেটআপ", ""]:
         bn_name = "বুলিশ ক্যান্ডেলস্টিক সেটআপ" if sig == "CALL" else "বিয়ারিশ ক্যান্ডেলস্টিক সেটআপ"
 
+    tot_dur = round(time.time() - t_start, 2)
+    logger.info(f"📊 [ANALYSIS COMPLETE] Pair: {detected_pair} | Signal: {sig} | Pattern: {raw_result.get('pattern_name')} | Time: {tot_dur}s")
+
     return {
         "is_trading_chart": True,
-        "pair": detected_pair.upper(),
+        "pair": detected_pair,
         "signal": sig,
         "pattern_id": raw_result.get("pattern_id", "candlestick_setup"),
         "pattern_name": raw_result.get("pattern_name", f"{sig} Signal"),
@@ -903,7 +960,7 @@ def get_dashboard_html():
             rows += `
               <tr style="border-bottom:1px solid #1e293b; color:#cbd5e1;">
                 <td style="padding:8px; font-weight:bold; color:#38bdf8;">${timeStr}</td>
-                <td style="padding:8px; font-weight:bold; color:#ffffff;">${s.pair || 'LIVE_OTC'}</td>
+                <td style="padding:8px; font-weight:bold; color:#ffffff;">${s.pair || 'EUR/USD (OTC)'}</td>
                 <td style="padding:8px;"><span style="background:${badgeBg}; color:#fff; padding:3px 8px; border-radius:4px; font-weight:bold; font-size:11px;">${badgeText}</span></td>
                 <td style="padding:8px; color:#94a3b8;">${s.pattern_name || 'Price Action'} <span style="color:#64748b;">(${s.pattern_name_bn || ''})</span></td>
                 <td style="padding:8px; color:#cbd5e1;">${s.candle_minute || '-'}</td>
@@ -1006,25 +1063,23 @@ async def handle_scan(
     file: Optional[UploadFile] = File(None)
 ):
     """
-    🔥 CORE MOBILE SCANNER ENDPOINT 🔥
-    Accepts mobile chart screenshots via multipart, base64 JSON, or pair query.
-    Generates 100% deterministic, synchronized CALL or PUT signals using 145 candlestick patterns.
+    🔥 CORE TRADING SCREEN SCANNER ENDPOINT 🔥
+    Accepts chart screenshots via multipart, base64 JSON, or pair query.
+    Extracts the EXACT pair being traded and delivers 100% synchronized CALL/PUT signals.
     """
     client_ip = request.client.host if request.client else "unknown"
-    now_str = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
-    print(f"\n=======================================================", flush=True)
-    print(f"📥 [API_SCAN RECEIVED] IP: {client_ip} | Time: {now_str} | Query Pair: {pair}", flush=True)
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     signal_cache.stats["total_scans"] += 1
-    signal_cache.stats["last_mobile_scan"] = now_str
-    signal_cache.stats["last_mobile_status"] = f"Connected ({client_ip})"
+    signal_cache.stats["last_desktop_scan"] = now_str
+    signal_cache.stats["last_desktop_status"] = f"Connected ({client_ip})"
 
-    image_bytes = None
     target_pair = pair
+    image_bytes = None
 
     if file:
         image_bytes = await file.read()
-        print(f"📁 [API_SCAN] Multipart upload received: {file.filename} ({len(image_bytes)} bytes)", flush=True)
+        logger.info(f"📁 [API_SCAN] Multipart upload received: {file.filename} ({len(image_bytes)} bytes) from {client_ip}")
     else:
         content_type = request.headers.get("content-type", "")
         if "multipart/form-data" in content_type:
@@ -1033,11 +1088,13 @@ async def handle_scan(
                 upload = form.get("image") or form.get("file")
                 if upload and hasattr(upload, "read"):
                     image_bytes = await upload.read()
-                if not target_pair and form.get("pair"):
-                    target_pair = str(form.get("pair"))
-                print(f"📁 [API_SCAN] Form multipart parsed ({len(image_bytes) if image_bytes else 0} bytes)", flush=True)
+                if not target_pair:
+                    target_pair = form.get("pair") or form.get("pair_name") or form.get("asset") or form.get("symbol")
+                    if target_pair:
+                        target_pair = str(target_pair).strip()
+                logger.info(f"📁 [API_SCAN] Form multipart parsed ({len(image_bytes) if image_bytes else 0} bytes)")
             except Exception as e:
-                print(f"⚠️ [API_SCAN ERROR] Form parse error: {e}", flush=True)
+                logger.error(f"⚠️ [API_SCAN ERROR] Form parse error: {e}")
         elif "application/json" in content_type:
             try:
                 body = await request.json()
@@ -1046,30 +1103,38 @@ async def handle_scan(
                     if "," in b64_str:
                         b64_str = b64_str.split(",")[1]
                     image_bytes = base64.b64decode(b64_str)
-                if not target_pair and body.get("pair"):
-                    target_pair = str(body.get("pair"))
-                print(f"📦 [API_SCAN] JSON payload received (Base64 image {len(image_bytes) if image_bytes else 0} bytes, pair: {target_pair})", flush=True)
+                if not target_pair:
+                    target_pair = body.get("pair") or body.get("pair_name") or body.get("asset") or body.get("symbol")
+                    if target_pair:
+                        target_pair = str(target_pair).strip()
+                logger.info(f"📦 [API_SCAN] JSON payload received (Base64 image {len(image_bytes) if image_bytes else 0} bytes, pair: {target_pair})")
             except Exception as e:
-                print(f"⚠️ [API_SCAN ERROR] JSON parse error: {e}", flush=True)
+                logger.error(f"⚠️ [API_SCAN ERROR] JSON parse error: {e}")
+
+    # Fallback to query param
+    if not target_pair and request.query_params.get("pair"):
+        target_pair = request.query_params.get("pair")
+
+    logger.info("======================================================================")
+    logger.info(f"📥 [API_SCAN INCOMING] Client: {client_ip} | Time: {now_str} | Traded Pair Hint: {target_pair or 'Auto-Detect'}")
 
     if image_bytes:
-        print(f"👁️ [API_SCAN] Running Gemini Vision AI + 145 Candlestick Pattern Engine...", flush=True)
+        logger.info(f"👁️ [API_SCAN] Running Gemini Vision AI + 145 Candlestick Pattern Engine...")
         eval_result = evaluate_chart_with_gemini(image_bytes, target_pair)
     else:
-        print(f"⚙️ [API_SCAN] No image provided, running high-confluence mathematical engine...", flush=True)
-        target_pair = target_pair or "EUR/USD OTC"
+        logger.info(f"⚙️ [API_SCAN] No image provided, running high-confluence mathematical engine...")
         now_dt = datetime.now(timezone.utc)
-        eval_result = generate_pair_signal(target_pair, now_dt)
+        eval_result = generate_pair_signal(target_pair or "EUR/USD (OTC)", now_dt)
 
-    pair_name = eval_result.get("pair", target_pair or "LIVE_OTC").upper().strip()
-    if pair_name in ["UNKNOWN", "", "NONE"]:
-        pair_name = "LIVE_OTC"
+    raw_p = eval_result.get("pair")
+    final_pair = normalize_pair_name(raw_p) or normalize_pair_name(target_pair) or "EUR/USD (OTC)"
+    eval_result["pair"] = final_pair
 
     # Check Minute-Lock Cache for this pair
-    cached = signal_cache.get(pair_name)
+    cached = signal_cache.get(final_pair)
     if cached is not None:
-        print(f"🔒 [API_SCAN CACHE HIT] {pair_name}: Returning locked signal {cached.get('signal')} ({cached.get('locked_key')})", flush=True)
-        print(f"=======================================================\n", flush=True)
+        logger.info(f"🔒 [API_SCAN CACHE HIT] {final_pair}: Returning locked signal {cached.get('signal')} ({cached.get('locked_key')})")
+        logger.info("======================================================================\n")
         await manager.broadcast(cached)
         return cached
 
@@ -1080,9 +1145,9 @@ async def handle_scan(
     eval_result["signal"] = sig
     eval_result["status"] = "ACTIVE" if sig in ["CALL", "PUT"] else "FILTERED"
 
-    locked = signal_cache.set(pair_name, eval_result)
-    print(f"✅ [API_SCAN NEW LOCK] {pair_name} -> Signal: {sig} | Pattern: {locked.get('pattern_name')} | Key: {locked.get('locked_key')}", flush=True)
-    print(f"=======================================================\n", flush=True)
+    locked = signal_cache.set(final_pair, eval_result)
+    logger.info(f"✅ [API_SCAN NEW LOCK] TRADED PAIR: >>> {final_pair} <<< | Signal: {sig} | Pattern: {locked.get('pattern_name')} | Key: {locked.get('locked_key')}")
+    logger.info("======================================================================\n")
     await manager.broadcast(locked)
     return locked
 
@@ -1091,30 +1156,50 @@ async def handle_mobile_gemini_proxy(request: Request, tail: str):
     """Fallback proxy for native Android widgets using Gemini format."""
     try:
         signal_cache.stats["total_scans"] += 1
-        signal_cache.stats["last_mobile_scan"] = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        client_ip = request.client.host if request.client else "unknown"
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        signal_cache.stats["last_mobile_scan"] = now_str
+        signal_cache.stats["last_mobile_status"] = f"Connected ({client_ip})"
+
         body = await request.json()
         b64_str = ""
+        prompt_text = ""
         contents = body.get("contents", [])
         for c in contents:
             for part in c.get("parts", []):
                 inline = part.get("inline_data", {})
                 if "data" in inline:
                     b64_str = inline["data"]
-                    break
-            if b64_str:
-                break
+                if "text" in part:
+                    prompt_text += " " + str(part["text"])
+
+        # Extract pair hint from prompt text, query, or headers
+        pair_hint = request.query_params.get("pair") or request.headers.get("X-Pair")
+        if not pair_hint and prompt_text:
+            m = re.search(r'([A-Za-z]{3}/[A-Za-z]{3}(?:\s*(?:\(OTC\)|OTC))?|[A-Za-z]{6}(?:\s*(?:\(OTC\)|OTC))?|Crypto\s*IDX|BTC/USD)', prompt_text, re.IGNORECASE)
+            if m:
+                pair_hint = m.group(1).upper()
+
+        logger.info("======================================================================")
+        logger.info(f"📱 [MOBILE APK PROXY] Client: {client_ip} | Endpoint: /v1beta/{tail} | Pair Hint: {pair_hint or 'From Chart Screen'}")
 
         if b64_str:
             img_bytes = base64.b64decode(b64_str)
-            res = evaluate_chart_with_gemini(img_bytes)
+            res = evaluate_chart_with_gemini(img_bytes, pair_hint=pair_hint)
         else:
             now_dt = datetime.now(timezone.utc)
-            res = generate_pair_signal("LIVE_OTC", now_dt)
+            res = generate_pair_signal(pair_hint or "EUR/USD (OTC)", now_dt)
 
-        pair_name = res.get("pair", "LIVE_OTC")
-        cached = signal_cache.get(pair_name)
+        raw_p = res.get("pair")
+        final_pair = normalize_pair_name(raw_p) or normalize_pair_name(pair_hint) or "EUR/USD (OTC)"
+        res["pair"] = final_pair
+
+        cached = signal_cache.get(final_pair)
         if not cached:
-            cached = signal_cache.set(pair_name, res)
+            cached = signal_cache.set(final_pair, res)
+
+        logger.info(f"🎯 [MOBILE APK RESULT] TRADED PAIR: >>> {final_pair} <<< | Signal: {cached.get('signal')} | Pattern: {cached.get('pattern_name')}")
+        logger.info("======================================================================\n")
 
         gemini_response = {
             "candidates": [{
@@ -1125,8 +1210,9 @@ async def handle_mobile_gemini_proxy(request: Request, tail: str):
         }
         return JSONResponse(gemini_response)
     except Exception as ex:
+        logger.error(f"⚠️ [MOBILE PROXY ERROR] {ex}")
         now_dt = datetime.now(timezone.utc)
-        sig = generate_pair_signal("LIVE_OTC", now_dt)
+        sig = generate_pair_signal("EUR/USD (OTC)", now_dt)
         return JSONResponse({
             "candidates": [{
                 "content": {

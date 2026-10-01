@@ -197,7 +197,7 @@ async def evaluate_chart_with_gemini(image_bytes):
         }
         raw_result = {
             "is_trading_chart": True,
-            "pair": "LIVE_OTC",
+            "pair": "EUR/USD (OTC)",
             "signal": chosen.get("signal", "CALL"),
             "pattern_id": chosen.get("id", "pattern"),
             "pattern_name": chosen.get("name", "Candlestick Setup"),
@@ -207,9 +207,9 @@ async def evaluate_chart_with_gemini(image_bytes):
             "reason": chosen.get("rule", "Price action rejection and candlestick pressure.")
         }
 
-    pair = raw_result.get("pair", "LIVE_OTC").upper().strip()
-    if pair in ["", "UNKNOWN", "NONE"]:
-        pair = "LIVE_OTC"
+    pair = raw_result.get("pair", "EUR/USD (OTC)").strip()
+    if pair.upper() in ["", "UNKNOWN", "NONE", "LIVE_OTC"]:
+        pair = "EUR/USD (OTC)"
 
     sig = str(raw_result.get("signal", "")).upper().strip()
     if sig not in ["CALL", "PUT"]:
@@ -295,9 +295,9 @@ async def handle_scan(request):
         # 2. Evaluate with Deterministic AI
         eval_result = await evaluate_chart_with_gemini(image_bytes)
 
-        pair_name = eval_result.get("pair", "LIVE_OTC")
-        if pair_name in ["", "UNKNOWN", "NONE"]:
-            pair_name = "LIVE_OTC"
+        pair_name = eval_result.get("pair", "EUR/USD (OTC)").strip()
+        if pair_name.upper() in ["", "UNKNOWN", "NONE", "LIVE_OTC"]:
+            pair_name = "EUR/USD (OTC)"
 
         # 3. Check Minute-Lock Cache
         cached_signal = signal_cache.get(pair_name)
@@ -314,7 +314,7 @@ async def handle_scan(request):
         return web.json_response(locked)
 
     except Exception as e:
-        print(f"[Server Scan Error] {e}")
+        print(f"[Server Scan Error] {e}", flush=True)
         return web.json_response({
             "is_trading_chart": False,
             "signal": "READY",
@@ -352,9 +352,9 @@ async def handle_mobile_gemini_scan(request):
         image_bytes = base64.b64decode(b64_str)
         eval_result = await evaluate_chart_with_gemini(image_bytes)
 
-        pair_name = eval_result.get("pair", "LIVE_OTC")
-        if pair_name in ["", "UNKNOWN", "NONE"]:
-            pair_name = "LIVE_OTC"
+        pair_name = eval_result.get("pair", "EUR/USD (OTC)").strip()
+        if pair_name.upper() in ["", "UNKNOWN", "NONE", "LIVE_OTC"]:
+            pair_name = "EUR/USD (OTC)"
 
         sig = eval_result.get("signal", "CALL")
         if sig not in ["CALL", "PUT"]:
