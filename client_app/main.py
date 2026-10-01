@@ -21,8 +21,8 @@ from kivy.graphics import Color, RoundedRectangle
 
 import requests
 
-# CONFIGURATION: Connected to your deployed Central Render Server
-SERVER_URL = "https://ai-laser-trading-server.onrender.com"
+# CONFIGURATION: Connected to your deployed Central Render Server (Singapore)
+SERVER_URL = "https://ai-laser-scanner-sg.onrender.com"
 
 CALL_WAV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "call_alert.wav")
 PUT_WAV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "put_alert.wav")
