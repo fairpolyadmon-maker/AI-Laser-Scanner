@@ -204,10 +204,16 @@ class MinuteSignalCache:
     def verify_previous_trade(self, pair_name: str, last_closed_candle_color: Optional[str], recent_trade_outcome: Optional[str] = None):
         """Verifies the actual trade outcome based on the real broker screen image captured by Gemini Vision."""
         norm_target = pair_name.upper().replace("/", "").replace(" ", "").replace("-", "")
+        now_ts = datetime.now(timezone.utc).timestamp()
         # Find the most recent unverified signal for this pair
         for s in reversed(self.history):
             p = s.get("pair", "").upper().replace("/", "").replace(" ", "").replace("-", "")
             if p == norm_target and s.get("signal") in ["CALL", "PUT"] and s.get("outcome") == "IN_PROGRESS":
+                target_ts = s.get("target_timestamp", 0)
+                # Only verify if trade candle has completed (at least 45s after candle open)
+                if target_ts > 0 and now_ts < target_ts + 45:
+                    continue
+
                 sig = s.get("signal")
                 color = str(last_closed_candle_color or "").upper().strip()
                 outcome_hint = str(recent_trade_outcome or "").upper().strip()
