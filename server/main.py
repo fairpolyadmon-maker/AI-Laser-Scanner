@@ -132,6 +132,15 @@ CRITICAL PAIR IDENTIFICATION MANDATE (TOP PRIORITY):
 - CRITICAL: Never return "LIVE_OTC", "UNKNOWN", "NONE", "READY", or a fabricated pair name!
 - You MUST output the exact characters of the pair being traded on the chart into the "pair" field.
 
+REAL CANDLE & TRADE OUTCOME VERIFICATION (MANDATORY):
+- Look at the candlesticks on the screen:
+  1. What is the color of the last completed candle (the closed candle immediately before the active candle)?
+     Output "last_closed_candle_color": "GREEN" | "RED" | "DOJI"
+  2. Inspect the broker's 'Trades' list or on-chart trade markers (e.g. Quotex bottom right panel with trade status):
+     - If the payout shows 0.00$ or price is losing against the trade direction -> "recent_trade_outcome": "LOSS"
+     - If the payout shows profit (+$) or price won in the trade direction -> "recent_trade_outcome": "WIN"
+     - If no trade marker is visible -> "recent_trade_outcome": "NEUTRAL"
+
 MASTER 145 CANDLESTICK PATTERNS KNOWLEDGE:
 [CALL PATTERNS (UP / BUY)]:
 {CALL_PATTERNS_TEXT}
@@ -143,6 +152,8 @@ RETURN VALID JSON ONLY:
 {{
   "is_trading_chart": true,
   "pair": "<EXACT_PAIR_NAME_FROM_SCREEN_E.G._USD/BDT_(OTC)>",
+  "last_closed_candle_color": "GREEN" | "RED" | "DOJI",
+  "recent_trade_outcome": "WIN" | "LOSS" | "NEUTRAL",
   "signal": "CALL" | "PUT" | "WAIT",
   "pattern_id": "<pattern_id>",
   "pattern_name": "<Pattern Name>",
@@ -190,39 +201,82 @@ class MinuteSignalCache:
         key, _ = self.get_candle_key(pair_name)
         return self.cache.get(key, None)
 
+    def verify_previous_trade(self, pair_name: str, last_closed_candle_color: Optional[str], recent_trade_outcome: Optional[str] = None):
+        """Verifies the actual trade outcome based on the real broker screen image captured by Gemini Vision."""
+        norm_target = pair_name.upper().replace("/", "").replace(" ", "").replace("-", "")
+        # Find the most recent unverified signal for this pair
+        for s in reversed(self.history):
+            p = s.get("pair", "").upper().replace("/", "").replace(" ", "").replace("-", "")
+            if p == norm_target and s.get("signal") in ["CALL", "PUT"] and s.get("outcome") == "IN_PROGRESS":
+                sig = s.get("signal")
+                color = str(last_closed_candle_color or "").upper().strip()
+                outcome_hint = str(recent_trade_outcome or "").upper().strip()
+
+                is_win = False
+                is_loss = False
+
+                # 1. First priority: Broker trade panel outcome (e.g. Quotex trade payout 0.00$ or +1.94$)
+                if outcome_hint == "WIN":
+                    is_win = True
+                elif outcome_hint == "LOSS":
+                    is_loss = True
+                # 2. Second priority: Actual color of the closed candle
+                elif sig == "CALL":
+                    if color == "GREEN":
+                        is_win = True
+                    elif color == "RED":
+                        is_loss = True
+                elif sig == "PUT":
+                    if color == "RED":
+                        is_win = True
+                    elif color == "GREEN":
+                        is_loss = True
+
+                if is_win:
+                    s["outcome"] = "DIRECT_WIN"
+                    s["outcome_bn"] = "ডাইরেক্ট উইন (Direct Win)"
+                    self.stats["wins_direct"] += 1
+                    logger.info(f"🏆 [TRADE VERIFIED WIN] {s.get('pair')} -> Signal: {sig} | Candle: {color} | Outcome: DIRECT_WIN")
+                elif is_loss:
+                    s["outcome"] = "LOSS"
+                    s["outcome_bn"] = "লস (Loss)"
+                    self.stats["losses"] += 1
+                    logger.info(f"❌ [TRADE VERIFIED LOSS] {s.get('pair')} -> Signal: {sig} | Candle: {color} | Outcome: LOSS")
+
+                # Update active card
+                p_up = s.get("pair", "").upper()
+                if p_up in self.active_signals and self.active_signals[p_up].get("locked_key") == s.get("locked_key"):
+                    self.active_signals[p_up]["outcome"] = s["outcome"]
+                    self.active_signals[p_up]["outcome_bn"] = s["outcome_bn"]
+
+                self._recalculate_winrate()
+                break
+
     def update_outcomes(self):
-        """Evaluates completed 1-minute trades and updates Win/Loss statistics."""
+        """Checks for expired unverified trades without assigning fake wins."""
         now_ts = datetime.now(timezone.utc).timestamp()
         for s in self.history:
             if s.get("signal") in ["CALL", "PUT"] and s.get("outcome") == "IN_PROGRESS":
                 target_ts = s.get("target_timestamp", 0)
-                # Trade duration is 1 minute (60s). Once 60s has passed, the candle is closed!
-                if target_ts > 0 and (now_ts - target_ts) >= 60:
-                    seed = sum(ord(c) for c in s.get("pair", "")) + int(target_ts // 60)
-                    pct = seed % 100
-                    if pct < 88:  # 88% Direct Win Non-MTG
-                        s["outcome"] = "DIRECT_WIN"
-                        s["outcome_bn"] = "ডাইরেক্ট উইন (Direct Win)"
-                        self.stats["wins_direct"] += 1
-                    elif pct < 96:  # 8% 1-Step MTG Win (Total 96% accuracy)
-                        s["outcome"] = "MTG1_WIN"
-                        s["outcome_bn"] = "১-স্টেপ মার্টিনগেল উইন (1-Step MTG)"
-                        self.stats["wins_mtg1"] += 1
-                    else:  # 4% Loss
-                        s["outcome"] = "LOSS"
-                        s["outcome_bn"] = "লস (Loss)"
-                        self.stats["losses"] += 1
+                # If more than 3 minutes have passed without a verification scan
+                if target_ts > 0 and (now_ts - target_ts) > 180:
+                    s["outcome"] = "UNVERIFIED"
+                    s["outcome_bn"] = "যাচাই ছাড়া সমাপ্ত"
                     
-                    # Update active card outcome if it matches
                     p_up = s.get("pair", "").upper()
                     if p_up in self.active_signals and self.active_signals[p_up].get("locked_key") == s.get("locked_key"):
                         self.active_signals[p_up]["outcome"] = s["outcome"]
                         self.active_signals[p_up]["outcome_bn"] = s["outcome_bn"]
 
+        self._recalculate_winrate()
+
+    def _recalculate_winrate(self):
         tot = self.stats["wins_direct"] + self.stats["wins_mtg1"] + self.stats["losses"]
+        self.stats["total_signals"] = tot
         if tot > 0:
-            self.stats["total_signals"] = tot
             self.stats["win_rate"] = round(((self.stats["wins_direct"] + self.stats["wins_mtg1"]) / tot) * 100, 1)
+        else:
+            self.stats["win_rate"] = 0.0
 
     def set(self, pair_name: str, signal_dict: dict):
         key, target_dt = self.get_candle_key(pair_name)
@@ -411,6 +465,12 @@ def evaluate_chart_with_gemini(image_bytes: bytes, pair_hint: Optional[str] = No
     ai_pair = normalize_pair_name(raw_result.get("pair") if raw_result else None)
     hint_pair = normalize_pair_name(pair_hint)
     detected_pair = ai_pair or hint_pair or "EUR/USD (OTC)"
+
+    # Real Vision-Based Trade Outcome Verification on prior trade for this pair
+    if raw_result and detected_pair:
+        candle_col = raw_result.get("last_closed_candle_color")
+        trade_out = raw_result.get("recent_trade_outcome")
+        signal_cache.verify_previous_trade(detected_pair, candle_col, trade_out)
 
     logger.info(f"🎯 [PAIR IDENTIFICATION] AI Detected: '{ai_pair}' | Client Hint: '{hint_pair}' | Trading Pair: >>> {detected_pair} <<<")
 
@@ -1153,6 +1213,8 @@ def get_dashboard_html():
               resBadge = '<span class="badge-mtg-win">🟡 MTG-1 WIN</span>';
             } else if (s.outcome === 'LOSS') {
               resBadge = '<span class="badge-loss">🔴 LOSS</span>';
+            } else if (s.outcome === 'UNVERIFIED') {
+              resBadge = '<span style="background:#1e293b; color:#94a3b8; border:1px solid #475569; padding:4px 8px; border-radius:6px; font-weight:bold; font-size:11px;">⚪ UNVERIFIED</span>';
             } else if (s.outcome === 'FILTERED') {
               resBadge = '<span style="background:#334155; color:#94a3b8; padding:3px 8px; border-radius:6px; font-size:11px;">⚪ ফিল্টার</span>';
             }
