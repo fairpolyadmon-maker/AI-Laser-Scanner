@@ -112,13 +112,20 @@ Our goal is strictly DIRECT WIN (Non-MTG) or MAXIMUM 1-Step Martingale. NEVER FO
    - Pattern ID: "resistance_consecutive_two_red"
    - Pattern Name: "Resistance Rejection Double Red (রেজিস্ট্যান্স থেকে পরপর ২টি লাল ক্যান্ডেল)"
 
-3. GOLDEN CONFLUENCE RULES FOR CALL (UP / BUY / Green Candle):
+3. ROUND NUMBER SNR STRATEGY (PSYCHOLOGICAL LEVELS ...00, ...50):
+   - Inspect the right-hand vertical price axis numbers (e.g. Quotex prices like 1.60000, 1.59950, 1.59900, 1.59850, 1.59800):
+   - If the candle touched or rejected from a Round Number level (ending in 00, 000, or 50) with an upper wick rejection and closed RED:
+     -> EMIT "PUT" (Pattern ID: "round_number_resistance_rejection", Name: "Round Number Resistance Rejection (রাউন্ড নাম্বার রিজেকশন)")
+   - If the candle touched or bounced from a Round Number level (ending in 00, 000, or 50) with a lower wick bounce and closed GREEN:
+     -> EMIT "CALL" (Pattern ID: "round_number_support_bounce", Name: "Round Number Support Bounce (রাউন্ড নাম্বার বাউন্স)")
+
+4. GOLDEN CONFLUENCE RULES FOR CALL (UP / BUY / Green Candle):
    - Key Support Bounce, Lower Wick Rejection, or Master Bullish Pattern (Engulfing, Hammer, Morning Star).
 
-4. GOLDEN CONFLUENCE RULES FOR PUT (DOWN / SELL / Red Candle):
+5. GOLDEN CONFLUENCE RULES FOR PUT (DOWN / SELL / Red Candle):
    - Key Resistance Rejection, Upper Wick Rejection, or Master Bearish Pattern (Engulfing, Shooting Star, Evening Star).
 
-5. SAFETY FILTER -> EMIT "WAIT" (NO TRADE):
+6. SAFETY FILTER -> EMIT "WAIT" (NO TRADE):
    - If candle is a tiny Doji, spinning top, alternating colors without direction, or mid-range consolidation.
    - If momentum is conflicting: RETURN "signal": "WAIT". Protecting capital from 4-step MTG is priority #1!
 
