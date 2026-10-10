@@ -10,7 +10,20 @@ A high-precision Binary Options & Forex trading analysis suite powered by Comput
 | :--- | :--- | :--- |
 | **v1.0.0** | Android Mobile App (Online) | Cloud Gemini Vision AI, real-time screen overlay. |
 | **v1.1.0** | Desktop App (Online) | Tkinter floating pill widget, 48-pattern cloud analysis, audio cues. |
-| **v2.0.0** | Desktop App (Offline Edition) | **100% Offline (Zero API Key)**, Local OpenCV Candle Engine + 48 Patterns, HWID Licensing (1 PC = 1 Key), direct GUI launch (`--noconsole`), Standalone `.exe` build. |
+| **v2.0.0** | Desktop App (Offline Edition) | 100% Offline, Local OpenCV Candle Engine, HWID Licensing. |
+| **v2.1.0** | **Windows Desktop & Android APK (Smart Offline)** | **100% Strict No Chart No Signal gate**, Bengali Voice announcements, 5s early audio alert (:55s), Standalone `.exe`, `.apk`, and GUI License Generator tool. |
+
+---
+
+## 📥 v2.1.0 Direct Downloads (GitHub Release)
+
+| File | Size | Direct Download Link |
+| :--- | :--- | :--- |
+| **Windows Desktop App** | ~74 MB | [Download AI.Laser.Scanner.Smart.Offline.exe](https://github.com/fairpolyadmon-maker/AI-Laser-Scanner/releases/download/v2.1.0/AI.Laser.Scanner.Smart.Offline.exe) |
+| **Android Mobile App** | ~14 MB | [Download AI_Laser_Scanner_Smart_Offline.apk](https://github.com/fairpolyadmon-maker/AI-Laser-Scanner/releases/download/v2.1.0/AI_Laser_Scanner_Smart_Offline.apk) |
+| **Admin License Generator (GUI .exe)** | ~11 MB | [Download AI.Laser.Scanner.License.Generator.exe](https://github.com/fairpolyadmon-maker/AI-Laser-Scanner/releases/download/v2.1.0/AI.Laser.Scanner.License.Generator.exe) |
+| **Admin License Generator (Python)** | ~3 KB | [Download license_generator.py](https://github.com/fairpolyadmon-maker/AI-Laser-Scanner/releases/download/v2.1.0/license_generator.py) |
+
 
 ---
 
